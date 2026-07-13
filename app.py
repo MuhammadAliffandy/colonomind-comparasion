@@ -153,8 +153,9 @@ else:
                 img_arr     = np.array(pil_img)
                 img_resized = cv2.resize(img_arr, IMG_SIZE)
                 raw_feats   = extract_features(img_resized)
-                scaled      = components["scaler"].transform(np.array(raw_feats).reshape(1, -1))
-                agent_input = np.hstack([[[0.5]], [[0.0]], [[0.0]], scaled])
+                # Scaler dilatih menggunakan 23 fitur: [confidence, umap_0, umap_1] + [20 fitur gambar]
+                full_feats  = [0.5, 0.0, 0.0] + raw_feats
+                agent_input = components["scaler"].transform(np.array(full_feats).reshape(1, -1))
                 proba       = components["agent"].predict(agent_input)[0]
                 if hasattr(proba, "__len__") and len(proba) > 1:
                     conf      = float(np.max(proba))
