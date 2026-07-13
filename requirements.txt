@@ -1,6 +1,8 @@
 # --- WEB FRAMEWORK ---
 streamlit>=1.30.0
 Pillow>=10.0.0
+plotly>=5.18.0
+pandas>=2.0.0
 
 # --- DATA SCIENCE & ML CORE ---
 numpy>=2.0.0
