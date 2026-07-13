@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Model files (too large for git - store separately on server)
+Result/
+*.h5
+*.pkl
+*.txt.model
+
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Temporary & Uploads
+temp_uploads/
+*.tmp
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment variables
+.env
+*.env

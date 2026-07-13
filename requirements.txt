@@ -1,0 +1,15 @@
+# --- WEB FRAMEWORK ---
+streamlit>=1.30.0
+Pillow>=10.0.0
+
+# --- DATA SCIENCE & ML CORE ---
+numpy==1.24.3
+scipy==1.14.1
+joblib==1.4.2
+scikit-learn==1.6.1
+lightgbm==4.6.0
+
+# --- IMAGE PROCESSING ---
+scikit-image==0.24.0
+PyWavelets==1.8.0
+opencv-python-headless==4.10.0.84
