@@ -4,7 +4,6 @@ import cv2
 import joblib
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import pywt
 import scipy.stats
 import warnings
@@ -264,35 +263,26 @@ if uploaded_files:
             m1.metric("Global Accuracy (ACC)", "92.4%", "+1.2% vs Baseline")
             m2.metric("Quad Weighted Kappa (QWK)", "0.89", "+0.03")
             
-            # Dummy ROC Curve
+            # Dummy ROC Curve using native Streamlit
             st.markdown("**Receiver Operating Characteristic (ROC)**")
-            fig_roc = go.Figure()
             fpr = np.linspace(0, 1, 100)
-            tpr = np.sqrt(fpr)  # Example curve shape
-            fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, name='ROC Area = 0.94', fill='tozeroy', mode='lines', line=dict(color='#667eea', width=3)))
-            fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], name='Random Guess', mode='lines', line=dict(color='gray', dash='dash')))
-            fig_roc.update_layout(height=280, margin=dict(l=0, r=0, t=30, b=0), showlegend=True,
-                                  xaxis_title="False Positive Rate", yaxis_title="True Positive Rate")
-            st.plotly_chart(fig_roc, use_container_width=True)
+            tpr_model  = np.sqrt(fpr)
+            tpr_random = fpr
+            roc_df = pd.DataFrame({
+                "Model (AUC=0.94)": tpr_model,
+                "Random Guess":     tpr_random,
+            }, index=np.round(fpr, 2))
+            roc_df.index.name = "False Positive Rate"
+            st.line_chart(roc_df, height=280)
 
         with col_eval_right:
             st.markdown("**Class Probabilities Bar Chart**")
-            # Bar chart for the 4 classes
-            df_proba = pd.DataFrame({
-                "Class": CLASS_NAMES,
-                "Probability": proba
-            })
-            
-            # Plotly bar chart
-            fig_bar = go.Figure(data=[go.Bar(
-                x=df_proba['Class'], 
-                y=df_proba['Probability'],
-                marker_color=['#2ea043', '#d4a017', '#fd7e14', '#f85149'],
-                text=[f"{p*100:.1f}%" for p in df_proba['Probability']],
-                textposition='auto'
-            )])
-            fig_bar.update_layout(height=380, margin=dict(l=0, r=0, t=30, b=0), yaxis=dict(range=[0, 1.05]))
-            st.plotly_chart(fig_bar, use_container_width=True)
+            # Native Streamlit bar chart
+            df_proba = pd.DataFrame(
+                {"Probability": proba},
+                index=CLASS_NAMES
+            )
+            st.bar_chart(df_proba, height=380)
             
         st.divider()
 
@@ -302,24 +292,18 @@ if uploaded_files:
         
         with col_text_left:
             st.markdown("**Top 5 Dominant Texture Features**")
-            # Using the scaled output for features to show relative impact
             # agent_input has 23 features. The last 20 are the image features.
             scaled_image_feats = agent_input[0, 3:]
-            # Get top 5 absolute values
-            top_5_idx = np.argsort(np.abs(scaled_image_feats))[-5:][::-1]
+            # Get top 5 by absolute value
+            top_5_idx   = np.argsort(np.abs(scaled_image_feats))[-5:][::-1]
             top_5_names = [FEAT_NAMES[i] for i in top_5_idx]
-            top_5_vals  = [scaled_image_feats[i] for i in top_5_idx]
-            
-            fig_feat = go.Figure(go.Bar(
-                x=top_5_vals,
-                y=top_5_names,
-                orientation='h',
-                marker_color='#764ba2',
-                text=[f"{v:.3f}" for v in top_5_vals],
-                textposition='auto'
-            ))
-            fig_feat.update_layout(height=350, margin=dict(l=0, r=0, t=30, b=0), yaxis=dict(autorange="reversed"))
-            st.plotly_chart(fig_feat, use_container_width=True)
+            top_5_vals  = [float(scaled_image_feats[i]) for i in top_5_idx]
+            # Native Streamlit bar chart
+            df_top5 = pd.DataFrame(
+                {"Scaled Value": top_5_vals},
+                index=top_5_names
+            )
+            st.bar_chart(df_top5, height=350)
             
         with col_text_right:
             st.markdown("**2D Texture List (All 20 Parameters)**")
