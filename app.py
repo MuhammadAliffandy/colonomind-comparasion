@@ -177,67 +177,150 @@ def main():
                 
             with c_res:
                 if selected_model == "Compare / Ensembles":
-                    st.error("Compare / Ensembles feature is coming soon.")
-                    continue
+                    models_to_run = MODEL_CHOICES
+                else:
+                    models_to_run = [selected_model]
                     
-                base_dir    = f"{BASE_DRIVE}/{selected_dataset_key}/{selected_model}_Experiment"
-                scaler_path = os.path.join(base_dir, f"{selected_model}_scaler.pkl")
-                agent_path  = os.path.join(base_dir, f"{selected_model}_agent.txt")
-                
-                if not os.path.exists(scaler_path) or not os.path.exists(agent_path):
-                    st.error("File model atau scaler tidak ditemukan!")
-                    continue
+                # Load per-class metrics
+                try:
+                    with open("per_class_metrics.json", "r") as f:
+                        per_class_metrics = json.load(f)
+                except Exception:
+                    per_class_metrics = {}
 
+                predictions = {}
                 img_arr = np.array(pil_img)
                 
-                with st.spinner("Analyzing image..."):
+                with st.spinner(f"Analyzing image with {len(models_to_run)} model(s)..."):
                     with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
                         np.save(tmp.name, img_arr)
                         tmp_name = tmp.name
                     
                     try:
-                        result = subprocess.run(
-                            ["python", "predict_worker.py", agent_path, scaler_path, tmp_name],
-                            capture_output=True, text=True, check=True
-                        )
-                        out_data = json.loads(result.stdout)
-                        raw_feats = out_data["feats"]
-                        agent_input_list = out_data["agent_input"]
-                        proba_list = out_data["proba"]
+                        for m in models_to_run:
+                            base_dir    = f"{BASE_DRIVE}/{selected_dataset_key}/{m}_Experiment"
+                            scaler_path = os.path.join(base_dir, f"{m}_scaler.pkl")
+                            agent_path  = os.path.join(base_dir, f"{m}_agent.txt")
+                            
+                            if not os.path.exists(scaler_path) or not os.path.exists(agent_path):
+                                predictions[m] = {"error": "Model files not found"}
+                                continue
+                                
+                            result = subprocess.run(
+                                ["python", "predict_worker.py", agent_path, scaler_path, tmp_name],
+                                capture_output=True, text=True, check=True
+                            )
+                            out_data = json.loads(result.stdout)
+                            
+                            proba_list = out_data["proba"]
+                            if len(proba_list) > 1:
+                                conf = float(max(proba_list))
+                                label_idx = int(proba_list.index(max(proba_list)))
+                            else:
+                                label_idx = int(proba_list[0])
+                                conf = 1.0
+                                proba_list = [1.0 if j == label_idx else 0.0 for j in range(len(CLASS_NAMES))]
+                                
+                            predictions[m] = {
+                                "feats": out_data["feats"],
+                                "agent_input": out_data["agent_input"],
+                                "proba": proba_list,
+                                "label_idx": label_idx,
+                                "label_str": CLASS_NAMES[label_idx],
+                                "conf": conf
+                            }
                     except subprocess.CalledProcessError as e:
                         st.error(f"Prediction error (code {e.returncode}): {e.stderr}")
+                        if os.path.exists(tmp_name): os.remove(tmp_name)
                         continue
                     except Exception as e:
                         st.error(f"Failed to parse prediction result: {e}")
+                        if os.path.exists(tmp_name): os.remove(tmp_name)
                         continue
                     finally:
                         if os.path.exists(tmp_name):
                             os.remove(tmp_name)
-                        
-                # Keep everything as plain Python lists — no numpy
-                proba = proba_list
-                
-                if len(proba) > 1:
-                    conf      = float(max(proba))
-                    label_idx = int(proba.index(max(proba)))
-                else:
-                    label_idx = int(proba[0])
-                    conf      = 1.0
-                    proba = [1.0 if j == label_idx else 0.0 for j in range(len(CLASS_NAMES))]
+
+                if selected_model == "Compare / Ensembles":
+                    # --- Majority Voting & Weighted Confidence ---
+                    valid_preds = {m: p for m, p in predictions.items() if "error" not in p}
+                    if not valid_preds:
+                        st.error("No valid predictions from models.")
+                        continue
                     
-                label_str = CLASS_NAMES[label_idx]
-                is_ref    = conf < 0.70
-                
-                st.markdown(f"""
-                <div style="text-align: center; margin-top: 1rem;">
-                  <div class="{LABEL_CSS[label_str]}">{label_str}</div>
-                  <div style="color:#aaa; margin-top:0.3rem;">{LABEL_DESC[label_str]}</div>
-                </div>""", unsafe_allow_html=True)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                c_m1, c_m2 = st.columns(2)
-                c_m1.metric("Confidence", f"{conf*100:.1f}%")
-                c_m2.metric("Referral Needed", "Yes" if is_ref else "No")
+                    votes = [p["label_str"] for p in valid_preds.values()]
+                    from collections import Counter
+                    vote_counts = Counter(votes)
+                    majority_class, majority_count = vote_counts.most_common(1)[0]
+                    
+                    # Weighted confidence logic
+                    total_weight = 0
+                    weighted_conf_sum = 0
+                    maj_idx = CLASS_NAMES.index(majority_class)
+                    
+                    for m, p in valid_preds.items():
+                        weight = per_class_metrics.get(m, {}).get(majority_class, 0.2)
+                        prob_for_maj = p["proba"][maj_idx]
+                        weighted_conf_sum += prob_for_maj * weight
+                        total_weight += weight
+                        
+                    overall_conf = weighted_conf_sum / total_weight if total_weight > 0 else 0
+                    
+                    # Referral: No if >= 3 models agree, Yes if < 3
+                    is_ref = majority_count < 3
+                    label_str = majority_class
+                    
+                    st.markdown(f"""
+                    <div style="text-align: center; margin-top: 1rem;">
+                      <div class="{LABEL_CSS[label_str]}">{label_str} (Ensemble Vote)</div>
+                      <div style="color:#aaa; margin-top:0.3rem;">{LABEL_DESC[label_str]}</div>
+                    </div>""", unsafe_allow_html=True)
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    c_m1, c_m2 = st.columns(2)
+                    c_m1.metric("Weighted Overall Confidence", f"{overall_conf*100:.1f}%")
+                    c_m2.metric("Referral Needed", "Yes (Low Agreement)" if is_ref else "No (High Agreement)")
+                    
+                    st.markdown("##### Individual Model Predictions")
+                    cols = st.columns(5)
+                    for idx, (m, p) in enumerate(valid_preds.items()):
+                        with cols[idx]:
+                            st.markdown(f"**{m}**<br>{p['label_str']}<br>{p['conf']*100:.1f}%", unsafe_allow_html=True)
+                            
+                    valid_model = list(valid_preds.keys())[0]
+                    raw_feats = valid_preds[valid_model]["feats"]
+                    agent_input_list = valid_preds[valid_model]["agent_input"]
+                    
+                    # Average probabilities for the ensemble bar chart
+                    proba = [0] * len(CLASS_NAMES)
+                    for p in valid_preds.values():
+                        for i in range(len(CLASS_NAMES)): proba[i] += p["proba"][i]
+                    proba = [x / len(valid_preds) for x in proba]
+                    
+                else:
+                    # --- Single Model ---
+                    p = predictions.get(selected_model)
+                    if not p or "error" in p:
+                        st.error(p.get("error", "Error processing image."))
+                        continue
+                        
+                    label_str = p["label_str"]
+                    conf = p["conf"]
+                    is_ref = conf < 0.70
+                    raw_feats = p["feats"]
+                    agent_input_list = p["agent_input"]
+                    proba = p["proba"]
+                    
+                    st.markdown(f"""
+                    <div style="text-align: center; margin-top: 1rem;">
+                      <div class="{LABEL_CSS[label_str]}">{label_str}</div>
+                      <div style="color:#aaa; margin-top:0.3rem;">{LABEL_DESC[label_str]}</div>
+                    </div>""", unsafe_allow_html=True)
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    c_m1, c_m2 = st.columns(2)
+                    c_m1.metric("Confidence", f"{conf*100:.1f}%")
+                    c_m2.metric("Referral Needed", "Yes" if is_ref else "No")
 
             st.divider()
 
@@ -260,6 +343,29 @@ def main():
                 m1, m2 = st.columns(2)
                 m1.metric("Global Accuracy (ACC)", metrics["acc"], f"{metrics['acc_delta']} vs Baseline")
                 m2.metric("Quad Weighted Kappa (QWK)", metrics["qwk"], metrics["qwk_delta"])
+                
+                st.markdown("### Per-Class Accuracy (from 1000 images)")
+                if selected_model == "Compare / Ensembles":
+                    # Build table for all models
+                    header_vals = ["Model"] + CLASS_NAMES
+                    cell_vals = [list(per_class_metrics.keys())]
+                    for cls in CLASS_NAMES:
+                        cell_vals.append([f"{per_class_metrics.get(m, {}).get(cls, 0)*100:.1f}%" for m in per_class_metrics.keys()])
+                        
+                    fig_per_class = go.Figure(data=[go.Table(
+                        header=dict(values=header_vals, fill_color='#1a1d2e', font=dict(color='#58a6ff')),
+                        cells=dict(values=cell_vals, fill_color='#161b22', font=dict(color='#c9d1d9'))
+                    )])
+                    fig_per_class.update_layout(height=250, margin=dict(l=0, r=0, t=0, b=0), paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_per_class, use_container_width=True)
+                else:
+                    # Display per-class accuracy for selected model
+                    model_cls_acc = per_class_metrics.get(selected_model, {})
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("MES0", f"{model_cls_acc.get('MES0', 0)*100:.1f}%")
+                    c2.metric("MES1", f"{model_cls_acc.get('MES1', 0)*100:.1f}%")
+                    c3.metric("MES2", f"{model_cls_acc.get('MES2', 0)*100:.1f}%")
+                    c4.metric("MES3", f"{model_cls_acc.get('MES3', 0)*100:.1f}%")
                 
                 st.markdown("### Receiver Operating Characteristic (ROC)")
                 # Use Plotly instead of st.line_chart to avoid PyArrow segfault
