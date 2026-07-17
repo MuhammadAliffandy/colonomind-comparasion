@@ -20,7 +20,7 @@ import plotly.graph_objects as go
 
 
 def main():
-    st.set_page_config(page_title="ColonoSense Diagnostic Agent", layout="wide", page_icon="🧬")
+    st.set_page_config(page_title="ColonoScopy Diagnostic Agent", layout="wide", page_icon="🧬")
 
     st.markdown("""
     <style>
@@ -145,7 +145,7 @@ def main():
     st.markdown("""
     <div class="main-header">
       <h1>🧬 ColonoSense — Diagnostic Agent</h1>
-      <p>Hybrid RAG & LightGBM Pipeline | Multi-Dataset Evaluation</p>
+      <p>This is for education purpose only</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -354,7 +354,7 @@ def main():
         st.info("👈 Silakan pilih pengaturan di panel kiri, lalu unggah gambar untuk memulai sesi Diagnostik.")
 
     # Footer
-    st.markdown("<div class='footer-tag'>Diagnostic Agent & RAG System © 2026</div>", unsafe_allow_html=True)
+    st.markdown("<div class='footer-tag'>Diagnostic Agent System © 2026</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
