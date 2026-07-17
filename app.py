@@ -49,6 +49,7 @@ def main():
         margin-top: 1rem;
         font-size: 1.05rem;
         line-height: 1.6;
+        color: #e0e0e0;
     }
     .footer-tag {
         text-align: center;
@@ -144,7 +145,7 @@ def main():
     # Main Header
     st.markdown("""
     <div class="main-header">
-      <h1>🧬 ColonoSense — Diagnostic Agent</h1>
+      <h1> Colonoscopy — Diagnostic Agent</h1>
       <p>This is for education purpose only</p>
     </div>
     """, unsafe_allow_html=True)
