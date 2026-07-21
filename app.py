@@ -17,6 +17,127 @@ import tempfile
 import subprocess
 import json
 import plotly.graph_objects as go
+import joblib
+import cv2
+import pywt
+import scipy.stats
+import lightgbm as lgb
+import tensorflow as tf
+import tensorflow_hub as hub
+from tensorflow.keras.models import load_model
+
+try:
+    from skimage.feature import graycomatrix, graycoprops
+except ImportError:
+    from skimage.feature import greycomatrix as graycomatrix, greycoprops as graycoprops
+
+@st.cache_resource
+def load_all_models(base_drive, dataset_key, model_names):
+    models = {}
+    for m in model_names:
+        exp_dir = os.path.join(base_drive, dataset_key, f"{m}_Experiment")
+        keras_path = os.path.join(exp_dir, f"{m}_hybrid.keras")
+        if not os.path.exists(keras_path):
+            legacy_path = os.path.join(exp_dir, f"{m}_hybrid.h5")
+            if os.path.exists(legacy_path):
+                keras_path = legacy_path
+                
+        # Dynamically map preprocess_input for legacy Keras models
+        if m == 'ResNet-50':
+            from tensorflow.keras.applications.resnet50 import preprocess_input as prep
+        elif m == 'DenseNet-121':
+            from tensorflow.keras.applications.densenet import preprocess_input as prep
+        elif m == 'EfficientNet-B4':
+            from tensorflow.keras.applications.efficientnet import preprocess_input as prep
+        elif m == 'ConvNeXt-Tiny':
+            from tensorflow.keras.applications.convnext import preprocess_input as prep
+        else:
+            prep = lambda img: (img / 127.5) - 1.0
+            
+        custom_objs = {
+            'KerasLayer': hub.KerasLayer,
+            'preprocess_input': prep,
+            '<lambda>': prep,
+            'resnet50_preprocess': prep,
+            'densenet_preprocess': prep,
+            'efficientnet_preprocess': prep,
+            'convnext_preprocess': prep,
+            'vit_preprocess': prep
+        }
+                
+        try:
+            dl_model = load_model(keras_path, compile=False, custom_objects=custom_objs)
+        except Exception as e:
+            dl_model = None
+            
+        try:
+            umap_model = joblib.load(os.path.join(exp_dir, f"{m}_umap.pkl"))
+            scaler = joblib.load(os.path.join(exp_dir, f"{m}_scaler.pkl"))
+            agent = lgb.Booster(model_file=os.path.join(exp_dir, f"{m}_agent.txt"))
+        except:
+            umap_model, scaler, agent = None, None, None
+            
+        models[m] = {"dl": dl_model, "umap": umap_model, "scaler": scaler, "agent": agent}
+    return models
+
+def extract_handcrafted_features(img_arr, WAVELET="db1"):
+    gray = cv2.cvtColor(cv2.resize(img_arr, (224, 224)), cv2.COLOR_RGB2GRAY)
+    coeffs2 = pywt.dwt2(gray, WAVELET)
+    LL, (LH, HL, HH) = coeffs2
+    def stats(sb):
+        return [float(np.mean(sb)), float(np.std(sb)), float(np.var(sb)), float(scipy.stats.entropy(np.abs(sb.flatten()) + 1e-6))]
+    feats  = stats(LL) + stats(LH) + stats(HL) + stats(HH)
+    feats += [float(np.sum(np.square(HH)) / HH.size)]
+    glcm = graycomatrix(gray, distances=[1,3,5], angles=[0, np.pi/4, np.pi/2, 3*np.pi/4], levels=256, symmetric=True, normed=True)
+    feats += [
+        float(np.mean(graycoprops(glcm, "contrast"))),
+        float(np.mean(graycoprops(glcm, "dissimilarity"))),
+        float(np.mean(graycoprops(glcm, "homogeneity"))),
+    ]
+    return feats
+
+def predict_single_image(img_arr, model_dict):
+    dl_model = model_dict["dl"]
+    umap_model = model_dict["umap"]
+    scaler = model_dict["scaler"]
+    agent = model_dict["agent"]
+    
+    if None in [dl_model, umap_model, scaler, agent]:
+        return {"error": "Missing model files"}
+        
+    img_resized = cv2.resize(img_arr, (224, 224))
+    img_rgb = np.expand_dims(img_resized, axis=0) 
+    
+    h_feats = extract_handcrafted_features(img_arr)
+    feats_scaled = scaler.transform(np.array(h_feats).reshape(1, -1))
+    umap_feat = umap_model.transform(feats_scaled)
+    
+    dl_proba = dl_model.predict([img_rgb, feats_scaled, umap_feat], verbose=0)[0]
+    dl_conf = float(np.max(dl_proba))
+    
+    if dl_conf >= 0.70:
+        final_proba = list(float(x) for x in dl_proba)
+        final_conf = dl_conf
+        source = "Deep Learning"
+        agent_input = []
+    else:
+        agent_input = np.hstack([umap_feat, feats_scaled])
+        agent_proba = agent.predict(agent_input)[0]
+        final_proba = list(float(x) for x in agent_proba)
+        final_conf = float(np.max(agent_proba))
+        source = "LightGBM Super Agent"
+        
+    label_idx = int(np.argmax(final_proba))
+    
+    return {
+        "feats": h_feats,
+        "agent_input": agent_input.tolist() if dl_conf < 0.70 else [],
+        "proba": final_proba,
+        "label_idx": label_idx,
+        "label_str": ["MES0", "MES1", "MES2", "MES3"][label_idx],
+        "conf": final_conf,
+        "source": source
+    }
 
 
 def main():
@@ -191,55 +312,16 @@ def main():
                 predictions = {}
                 img_arr = np.array(pil_img)
                 
+                # Pre-load models in memory
+                loaded_models = load_all_models(BASE_DRIVE, selected_dataset_key, models_to_run)
+                
                 with st.spinner(f"Analyzing image with {len(models_to_run)} model(s)..."):
-                    with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
-                        np.save(tmp.name, img_arr)
-                        tmp_name = tmp.name
-                    
                     try:
                         for m in models_to_run:
-                            base_dir    = f"{BASE_DRIVE}/{selected_dataset_key}/{m}_Experiment"
-                            scaler_path = os.path.join(base_dir, f"{m}_scaler.pkl")
-                            agent_path  = os.path.join(base_dir, f"{m}_agent.txt")
-                            
-                            if not os.path.exists(scaler_path) or not os.path.exists(agent_path):
-                                predictions[m] = {"error": "Model files not found"}
-                                continue
-                                
-                            result = subprocess.run(
-                                ["python", "predict_worker.py", agent_path, scaler_path, tmp_name],
-                                capture_output=True, text=True, check=True
-                            )
-                            out_data = json.loads(result.stdout)
-                            
-                            proba_list = out_data["proba"]
-                            if len(proba_list) > 1:
-                                conf = float(max(proba_list))
-                                label_idx = int(proba_list.index(max(proba_list)))
-                            else:
-                                label_idx = int(proba_list[0])
-                                conf = 1.0
-                                proba_list = [1.0 if j == label_idx else 0.0 for j in range(len(CLASS_NAMES))]
-                                
-                            predictions[m] = {
-                                "feats": out_data["feats"],
-                                "agent_input": out_data["agent_input"],
-                                "proba": proba_list,
-                                "label_idx": label_idx,
-                                "label_str": CLASS_NAMES[label_idx],
-                                "conf": conf
-                            }
-                    except subprocess.CalledProcessError as e:
-                        st.error(f"Prediction error (code {e.returncode}): {e.stderr}")
-                        if os.path.exists(tmp_name): os.remove(tmp_name)
-                        continue
+                            predictions[m] = predict_single_image(img_arr, loaded_models[m])
                     except Exception as e:
-                        st.error(f"Failed to parse prediction result: {e}")
-                        if os.path.exists(tmp_name): os.remove(tmp_name)
+                        st.error(f"Failed to process prediction: {e}")
                         continue
-                    finally:
-                        if os.path.exists(tmp_name):
-                            os.remove(tmp_name)
 
                 if selected_model == "Compare / Ensembles":
                     # --- Majority Voting & Weighted Confidence ---
@@ -285,7 +367,7 @@ def main():
                     cols = st.columns(5)
                     for idx, (m, p) in enumerate(valid_preds.items()):
                         with cols[idx]:
-                            st.markdown(f"**{m}**<br>{p['label_str']}<br>{p['conf']*100:.1f}%", unsafe_allow_html=True)
+                            st.markdown(f"**{m}**<br>{p['label_str']}<br>{p['conf']*100:.1f}%<br><span style='font-size:0.75rem; color:#aaa;'>({p['source']})</span>", unsafe_allow_html=True)
                             
                     valid_model = list(valid_preds.keys())[0]
                     raw_feats = valid_preds[valid_model]["feats"]
@@ -310,6 +392,7 @@ def main():
                     raw_feats = p["feats"]
                     agent_input_list = p["agent_input"]
                     proba = p["proba"]
+                    source = p.get("source", "Deep Learning")
                     
                     st.markdown(f"""
                     <div style="text-align: center; margin-top: 1rem;">
@@ -318,9 +401,10 @@ def main():
                     </div>""", unsafe_allow_html=True)
                     
                     st.markdown("<br>", unsafe_allow_html=True)
-                    c_m1, c_m2 = st.columns(2)
+                    c_m1, c_m2, c_m3 = st.columns(3)
                     c_m1.metric("Confidence", f"{conf*100:.1f}%")
-                    c_m2.metric("Referral Needed", "Yes" if is_ref else "No")
+                    c_m2.metric("Prediction Source", source)
+                    c_m3.metric("Referral Needed", "Yes" if is_ref else "No")
 
             st.divider()
 
