@@ -71,13 +71,14 @@ def load_all_models(base_drive, dataset_key, model_names):
             dl_model = None
             
         try:
-            umap_model = joblib.load(os.path.join(exp_dir, f"{m}_umap.pkl"))
-            scaler = joblib.load(os.path.join(exp_dir, f"{m}_scaler.pkl"))
+            umap_model = joblib.load(os.path.join(exp_dir, "umap_model.pkl"))
+            base_scaler = joblib.load(os.path.join(exp_dir, "base_scaler.pkl"))
+            agent_scaler = joblib.load(os.path.join(exp_dir, f"{m}_scaler.pkl"))
             agent = lgb.Booster(model_file=os.path.join(exp_dir, f"{m}_agent.txt"))
         except:
-            umap_model, scaler, agent = None, None, None
+            umap_model, base_scaler, agent_scaler, agent = None, None, None, None
             
-        models[m] = {"dl": dl_model, "umap": umap_model, "scaler": scaler, "agent": agent}
+        models[m] = {"dl": dl_model, "umap": umap_model, "base_scaler": base_scaler, "agent_scaler": agent_scaler, "agent": agent}
     return models
 
 def extract_handcrafted_features(img_arr, WAVELET="db1"):
@@ -99,29 +100,33 @@ def extract_handcrafted_features(img_arr, WAVELET="db1"):
 def predict_single_image(img_arr, model_dict):
     dl_model = model_dict["dl"]
     umap_model = model_dict["umap"]
-    scaler = model_dict["scaler"]
+    base_scaler = model_dict["base_scaler"]
+    agent_scaler = model_dict["agent_scaler"]
     agent = model_dict["agent"]
     
-    if None in [dl_model, umap_model, scaler, agent]:
+    if None in [dl_model, umap_model, base_scaler, agent_scaler, agent]:
         return {"error": "Missing model files"}
         
     img_resized = cv2.resize(img_arr, (224, 224))
     img_rgb = np.expand_dims(img_resized, axis=0) 
     
     h_feats = extract_handcrafted_features(img_arr)
-    feats_scaled = scaler.transform(np.array(h_feats).reshape(1, -1))
+    feats_scaled = base_scaler.transform(np.array(h_feats).reshape(1, -1))
     umap_feat = umap_model.transform(feats_scaled)
     
     dl_proba = dl_model.predict([img_rgb, feats_scaled, umap_feat], verbose=0)[0]
     dl_conf = float(np.max(dl_proba))
     
-    if dl_conf >= 0.70:
+    if dl_conf >= 0.50:
         final_proba = list(float(x) for x in dl_proba)
         final_conf = dl_conf
-        source = "Deep Learning"
-        agent_input = []
+        source = "Deep Learning (ResNet/ViT dll)"
+        agent_input = np.array([])
     else:
-        agent_input = np.hstack([umap_feat, feats_scaled])
+        # Construct agent input: [confidence, umap_0, umap_1, f0..f19]
+        agent_features = np.hstack([[dl_conf], umap_feat[0], feats_scaled[0]]).reshape(1, -1)
+        agent_input = agent_scaler.transform(agent_features)
+        
         agent_proba = agent.predict(agent_input)[0]
         final_proba = list(float(x) for x in agent_proba)
         final_conf = float(np.max(agent_proba))
@@ -131,7 +136,7 @@ def predict_single_image(img_arr, model_dict):
     
     return {
         "feats": h_feats,
-        "agent_input": agent_input.tolist() if dl_conf < 0.70 else [],
+        "agent_input": agent_input.tolist() if agent_input.size > 0 else [],
         "proba": final_proba,
         "label_idx": label_idx,
         "label_str": ["MES0", "MES1", "MES2", "MES3"][label_idx],
