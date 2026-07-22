@@ -235,6 +235,14 @@ def main():
             model_path = f"{BASE_DRIVE}/{selected_dataset_key}/{selected_model}_Experiment"
             st.markdown("**Model Path:**")
             st.markdown(f"<div class='path-badge'>{model_path}</div>", unsafe_allow_html=True)
+            voting_threshold = 3 # default unused
+        else:
+            voting_threshold = st.selectbox(
+                "Voting Threshold (Agreement needed)",
+                [3, 4, 5],
+                format_func=lambda x: f"{x}/5 Models Agree",
+                index=0
+            )
         st.markdown("---")
 
 
@@ -353,20 +361,28 @@ def main():
                         
                     overall_conf = weighted_conf_sum / total_weight if total_weight > 0 else 0
                     
-                    # Referral: No if >= 3 models agree, Yes if < 3
-                    is_ref = majority_count < 3
-                    label_str = majority_class
+                    # Referral: No if >= voting_threshold models agree, Yes if < threshold
+                    is_ref = majority_count < voting_threshold
                     
-                    st.markdown(f"""
-                    <div style="text-align: center; margin-top: 1rem;">
-                      <div class="{LABEL_CSS[label_str]}">{label_str} (Ensemble Vote)</div>
-                      <div style="color:#aaa; margin-top:0.3rem;">{LABEL_DESC[label_str]}</div>
-                    </div>""", unsafe_allow_html=True)
+                    if is_ref:
+                        st.markdown(f"""
+                        <div style="text-align: center; margin-top: 1rem; padding: 1rem; background-color: rgba(255,165,0,0.1); border-radius: 8px; border: 1px solid orange;">
+                          <h2 style="color: orange; margin: 0;">Uncertain / Refer to Doctor</h2>
+                          <div style="color:#aaa; margin-top:0.5rem;">Only {majority_count}/5 models agreed on {majority_class}. (Threshold: {voting_threshold}/5)</div>
+                        </div>""", unsafe_allow_html=True)
+                    else:
+                        label_str = majority_class
+                        st.markdown(f"""
+                        <div style="text-align: center; margin-top: 1rem;">
+                          <div class="{LABEL_CSS.get(label_str, 'label-mes0')}">{label_str} (Ensemble Vote)</div>
+                          <div style="color:#aaa; margin-top:0.3rem;">{LABEL_DESC.get(label_str, '')}</div>
+                        </div>""", unsafe_allow_html=True)
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     c_m1, c_m2 = st.columns(2)
                     c_m1.metric("Weighted Overall Confidence", f"{overall_conf*100:.1f}%")
-                    c_m2.metric("Referral Needed", "Yes (Low Agreement)" if is_ref else "No (High Agreement)")
+                    c_m2.metric("Referral Needed", f"Yes (< {voting_threshold} Agreement)" if is_ref else f"No (>= {voting_threshold} Agreement)")
+
                     
                     st.markdown("##### Individual Model Predictions")
                     cols = st.columns(5)
