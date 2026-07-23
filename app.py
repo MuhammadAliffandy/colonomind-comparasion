@@ -384,6 +384,9 @@ def main():
                     # Referral: No if >= voting_threshold models agree, Yes if < threshold
                     is_ref = majority_count < voting_threshold
                     
+                    # Always define label_str so section D can use it
+                    label_str = majority_class
+
                     if is_ref:
                         st.markdown(f"""
                         <div style="text-align: center; margin-top: 1rem; padding: 1rem; background-color: rgba(255,165,0,0.1); border-radius: 8px; border: 1px solid orange;">
@@ -391,7 +394,6 @@ def main():
                           <div style="color:#aaa; margin-top:0.5rem;">Only {majority_count}/5 models agreed on {majority_class}. (Threshold: {voting_threshold}/5)</div>
                         </div>""", unsafe_allow_html=True)
                     else:
-                        label_str = majority_class
                         st.markdown(f"""
                         <div style="text-align: center; margin-top: 1rem;">
                           <div class="{LABEL_CSS.get(label_str, 'label-mes0')}">{label_str} (Ensemble Vote)</div>
