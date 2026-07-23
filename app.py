@@ -3,6 +3,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -65,8 +66,14 @@ def load_all_models(base_drive, dataset_key, model_names):
             'vit_preprocess': prep
         }
                 
+        from tensorflow.keras.utils import custom_object_scope
         try:
-            dl_model = load_model(keras_path, compile=False, custom_objects=custom_objs)
+            with custom_object_scope(custom_objs):
+                try:
+                    dl_model = load_model(keras_path, compile=False, safe_mode=False)
+                except TypeError:
+                    # Fallback for older TF versions that don't support safe_mode=False
+                    dl_model = load_model(keras_path, compile=False)
         except Exception as e:
             error_msg = f"Keras Load Error: {e}"
             print(f"Error loading {keras_path}: {e}")
