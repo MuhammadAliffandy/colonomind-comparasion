@@ -68,6 +68,8 @@ def load_all_models(base_drive, dataset_key, model_names):
         try:
             dl_model = load_model(keras_path, compile=False, custom_objects=custom_objs)
         except Exception as e:
+            error_msg = f"Keras Load Error: {e}"
+            print(f"Error loading {keras_path}: {e}")
             dl_model = None
             
         try:
@@ -75,10 +77,14 @@ def load_all_models(base_drive, dataset_key, model_names):
             base_scaler = joblib.load(os.path.join(exp_dir, "base_scaler.pkl"))
             agent_scaler = joblib.load(os.path.join(exp_dir, f"{m}_scaler.pkl"))
             agent = lgb.Booster(model_file=os.path.join(exp_dir, f"{m}_agent.txt"))
-        except:
+        except Exception as e:
+            error_msg = f"PKL/Agent Load Error: {e}"
+            print(f"Error loading PKL/Agent for {m}: {e}")
             umap_model, base_scaler, agent_scaler, agent = None, None, None, None
             
         models[m] = {"dl": dl_model, "umap": umap_model, "base_scaler": base_scaler, "agent_scaler": agent_scaler, "agent": agent}
+        if None in models[m].values():
+            models[m]["error"] = error_msg
     return models
 
 def extract_handcrafted_features(img_arr, WAVELET="db1"):
@@ -104,8 +110,10 @@ def predict_single_image(img_arr, model_dict):
     agent_scaler = model_dict["agent_scaler"]
     agent = model_dict["agent"]
     
+    if "error" in model_dict:
+        return {"error": model_dict["error"]}
     if None in [dl_model, umap_model, base_scaler, agent_scaler, agent]:
-        return {"error": "Missing model files"}
+        return {"error": "Missing model files or failed to load"}
         
     img_resized = cv2.resize(img_arr, (224, 224))
     img_rgb = np.expand_dims(img_resized, axis=0) 
@@ -342,6 +350,10 @@ def main():
                     valid_preds = {m: p for m, p in predictions.items() if "error" not in p}
                     if not valid_preds:
                         st.error("No valid predictions from models.")
+                        st.error("Debug Info:")
+                        for m, p in predictions.items():
+                            if "error" in p:
+                                st.error(f"{m}: {p['error']}")
                         continue
                     
                     votes = [p["label_str"] for p in valid_preds.values()]
