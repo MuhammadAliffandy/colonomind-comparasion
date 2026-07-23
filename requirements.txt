@@ -17,3 +17,4 @@ opencv-python-headless==4.10.0.84
 tensorflow>=2.15.0
 tensorflow-hub>=0.16.1
 umap-learn>=0.5.6
+tf-keras>=2.15.0
