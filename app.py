@@ -227,22 +227,14 @@ def main():
         )
         
         st.markdown("---")
-        st.subheader("🤖 2. Model Selection")
-        EXTENDED_MODELS = MODEL_CHOICES + ["Compare / Ensembles"]
-        selected_model = st.radio("Choose Model", EXTENDED_MODELS, label_visibility="collapsed")
-        
-        if selected_model != "Compare / Ensembles":
-            model_path = f"{BASE_DRIVE}/{selected_dataset_key}/{selected_model}_Experiment"
-            st.markdown("**Model Path:**")
-            st.markdown(f"<div class='path-badge'>{model_path}</div>", unsafe_allow_html=True)
-            voting_threshold = 3 # default unused
-        else:
-            voting_threshold = st.selectbox(
-                "Voting Threshold (Agreement needed)",
-                [3, 4, 5],
-                format_func=lambda x: f"{x}/5 Models Agree",
-                index=0
-            )
+        st.subheader("🤖 2. Ensemble Settings")
+        selected_model = "Compare / Ensembles"
+        voting_threshold = st.selectbox(
+            "Voting Threshold (Agreement needed)",
+            [3, 4, 5],
+            format_func=lambda x: f"{x}/5 Models Agree",
+            index=0
+        )
         st.markdown("---")
 
 
