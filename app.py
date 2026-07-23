@@ -2,7 +2,6 @@ import os
 import warnings
 
 warnings.filterwarnings("ignore")
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -32,7 +31,34 @@ try:
 except ImportError:
     from skimage.feature import greycomatrix as graycomatrix, greycoprops as graycoprops
 
-@st.cache_resource
+import keras
+
+# Register all custom preprocessing functions so Keras 3 can find them
+# when deserializing models saved with custom Lambda layers.
+@keras.saving.register_keras_serializable(package="Custom")
+def resnet50_preprocess(x):
+    from tensorflow.keras.applications.resnet50 import preprocess_input
+    return preprocess_input(x)
+
+@keras.saving.register_keras_serializable(package="Custom")
+def densenet_preprocess(x):
+    from tensorflow.keras.applications.densenet import preprocess_input
+    return preprocess_input(x)
+
+@keras.saving.register_keras_serializable(package="Custom")
+def efficientnet_preprocess(x):
+    from tensorflow.keras.applications.efficientnet import preprocess_input
+    return preprocess_input(x)
+
+@keras.saving.register_keras_serializable(package="Custom")
+def convnext_preprocess(x):
+    from tensorflow.keras.applications.convnext import preprocess_input
+    return preprocess_input(x)
+
+@keras.saving.register_keras_serializable(package="Custom")
+def vit_preprocess(x):
+    return (x / 127.5) - 1.0
+
 def load_all_models(base_drive, dataset_key, model_names):
     models = {}
     for m in model_names:
@@ -43,29 +69,10 @@ def load_all_models(base_drive, dataset_key, model_names):
             if os.path.exists(legacy_path):
                 keras_path = legacy_path
                 
-        if m == 'ResNet-50':
-            from tensorflow.keras.applications.resnet50 import preprocess_input as prep
-        elif m == 'DenseNet-121':
-            from tensorflow.keras.applications.densenet import preprocess_input as prep
-        elif m == 'EfficientNet-B4':
-            from tensorflow.keras.applications.efficientnet import preprocess_input as prep
-        elif m == 'ConvNeXt-Tiny':
-            from tensorflow.keras.applications.convnext import preprocess_input as prep
-        else:
-            prep = lambda img: (img / 127.5) - 1.0
-            
-        custom_objs = {
-            'KerasLayer': hub.KerasLayer,
-            'preprocess_input': prep,
-            '<lambda>': prep,
-            'resnet50_preprocess': prep,
-            'densenet_preprocess': prep,
-            'efficientnet_preprocess': prep,
-            'convnext_preprocess': prep,
-            'vit_preprocess': prep
-        }
+        custom_objs = {'KerasLayer': hub.KerasLayer}
                 
         try:
+            # safe_mode=False needed to allow Lambda layers to deserialize
             dl_model = load_model(keras_path, compile=False, custom_objects=custom_objs, safe_mode=False)
         except Exception as e:
             error_msg = f"Keras Load Error: {e}"
