@@ -534,8 +534,12 @@ def main():
             
             with col_text_left:
                 st.markdown("**Top 5 Dominant Texture Features**")
-                # agent_input_list is a 2D list [[23 values]]. The last 20 are image features.
-                scaled_image_feats = agent_input_list[0][3:]
+                # agent_input_list may be empty if DL branch was used (high confidence).
+                # Fall back to raw_feats if agent was not invoked.
+                if agent_input_list and len(agent_input_list[0]) > 3:
+                    scaled_image_feats = agent_input_list[0][3:]
+                else:
+                    scaled_image_feats = raw_feats
                 # Get top 5 by absolute value
                 abs_vals = [abs(v) for v in scaled_image_feats]
                 indexed = sorted(enumerate(abs_vals), key=lambda x: x[1], reverse=True)[:5]
