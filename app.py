@@ -219,13 +219,22 @@ def main():
         st.markdown("## ⚙️ Configuration")
         st.markdown("---")
         st.subheader("📁 1. Dataset")
-        selected_dataset_key = st.selectbox(
-            "Select Dataset",
-            list(DATASET_CHOICES.keys()),
-            format_func=lambda x: DATASET_CHOICES[x],
-            label_visibility="collapsed"
-        )
         
+        # Auto-detect dataset folder inside BASE_DRIVE
+        if os.path.exists(BASE_DRIVE):
+            available_datasets = [d for d in os.listdir(BASE_DRIVE) if os.path.isdir(os.path.join(BASE_DRIVE, d))]
+            if available_datasets:
+                selected_dataset_key = available_datasets[0]
+                # Try to get a pretty name if it exists in DATASET_CHOICES, otherwise use the folder name
+                pretty_name = DATASET_CHOICES.get(selected_dataset_key, selected_dataset_key)
+                st.markdown(f"**Auto-selected:** `{pretty_name}`")
+            else:
+                st.error("⚠️ No dataset folders found in ./Result/")
+                selected_dataset_key = "Unknown"
+        else:
+            st.error("⚠️ ./Result directory not found.")
+            selected_dataset_key = "Unknown"
+            
         st.markdown("---")
         st.subheader("🤖 2. Ensemble Settings")
         selected_model = "Compare / Ensembles"
