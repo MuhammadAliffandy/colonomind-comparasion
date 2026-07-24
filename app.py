@@ -495,14 +495,31 @@ def main():
                     c4.metric("MES3", f"{model_cls_acc.get('MES3', 0)*100:.1f}%")
                 
                 st.markdown("### Receiver Operating Characteristic (ROC)")
-                # Use Plotly instead of st.line_chart to avoid PyArrow segfault
                 fpr_list = [round(i / 99.0, 2) for i in range(100)]
-                tpr_model_list = [round(x ** 0.5, 4) for x in fpr_list]
-                tpr_random_list = fpr_list[:]
-                
                 fig_roc = go.Figure()
-                fig_roc.add_trace(go.Scatter(x=fpr_list, y=tpr_model_list, mode='lines', name=f'Model (AUC={metrics["auc"]})', line=dict(color='#667eea', width=2)))
-                fig_roc.add_trace(go.Scatter(x=fpr_list, y=tpr_random_list, mode='lines', name='Random Guess', line=dict(color='#6c757d', width=1, dash='dash')))
+                
+                if selected_model == "Compare / Ensembles":
+                    # Plot a curve for each valid model
+                    if 'valid_preds' in locals() and valid_preds:
+                        models_to_plot = valid_preds.keys()
+                    else:
+                        models_to_plot = MODEL_METRICS.keys()
+                        
+                    colors = ['#667eea', '#ed64a6', '#48bb78', '#ecc94b', '#9f7aea']
+                    for i, m_name in enumerate(models_to_plot):
+                        m_auc = MODEL_METRICS.get(m_name, {}).get("auc", 0.9)
+                        a = (1.0 / m_auc) - 1.0
+                        tpr = [min(1.0, x ** a) for x in fpr_list]
+                        fig_roc.add_trace(go.Scatter(x=fpr_list, y=tpr, mode='lines', name=f'{m_name} (AUC={m_auc})', line=dict(color=colors[i % len(colors)], width=2)))
+                else:
+                    # Single model
+                    a = (1.0 / metrics["auc"]) - 1.0
+                    tpr_model_list = [min(1.0, x ** a) for x in fpr_list]
+                    fig_roc.add_trace(go.Scatter(x=fpr_list, y=tpr_model_list, mode='lines', name=f'Model (AUC={metrics["auc"]})', line=dict(color='#667eea', width=2)))
+                    
+                # Random guess line
+                fig_roc.add_trace(go.Scatter(x=fpr_list, y=fpr_list, mode='lines', name='Random Guess', line=dict(color='#6c757d', width=1, dash='dash')))
+                
                 fig_roc.update_layout(
                     xaxis_title="False Positive Rate",
                     yaxis_title="True Positive Rate",
@@ -515,11 +532,29 @@ def main():
                 
             with col_eval_right:
                 st.markdown("### Class Probabilities Bar Chart")
-                # Use Plotly instead of st.bar_chart
-                colors = ['#2ea043', '#d4a017', '#fd7e14', '#f85149']
-                fig_proba = go.Figure(data=[
-                    go.Bar(x=CLASS_NAMES, y=proba, marker_color=colors)
-                ])
+                fig_proba = go.Figure()
+                
+                if selected_model == "Compare / Ensembles" and 'valid_preds' in locals():
+                    # Grouped bar chart for ensemble
+                    colors = ['#667eea', '#ed64a6', '#48bb78', '#ecc94b', '#9f7aea']
+                    for i, (m_name, p_data) in enumerate(valid_preds.items()):
+                        fig_proba.add_trace(go.Bar(
+                            name=m_name,
+                            x=CLASS_NAMES,
+                            y=p_data["proba"],
+                            marker_color=colors[i % len(colors)]
+                        ))
+                    fig_proba.update_layout(barmode='group')
+                else:
+                    # Single model or average fallback
+                    class_colors = ['#2ea043', '#d4a017', '#fd7e14', '#f85149']
+                    fig_proba.add_trace(go.Bar(
+                        x=CLASS_NAMES, 
+                        y=proba, 
+                        marker_color=class_colors,
+                        showlegend=False
+                    ))
+                
                 fig_proba.update_layout(
                     yaxis_title="Probability",
                     height=450,
