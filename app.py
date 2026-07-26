@@ -36,11 +36,11 @@ def efficientnet_preprocess(x):
     return (x / 127.5) - 1.0
 
 @keras.saving.register_keras_serializable(package="Custom")
-def convnext_tiny_preprocess(x):
+def convnext_preprocess(x):
     return (x / 127.5) - 1.0
 
 @keras.saving.register_keras_serializable(package="Custom")
-def vit_b16_preprocess(x):
+def vit_preprocess(x):
     return (x / 127.5) - 1.0
 
 # Patch Dense to ignore quantization_config (for older Keras versions on DGX)
