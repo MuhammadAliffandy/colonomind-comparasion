@@ -28,11 +28,11 @@ def resnet50_preprocess(x):
     return (x / 127.5) - 1.0
 
 @keras.saving.register_keras_serializable(package="Custom")
-def densenet121_preprocess(x):
+def densenet_preprocess(x):
     return (x / 127.5) - 1.0
 
 @keras.saving.register_keras_serializable(package="Custom")
-def efficientnet_b4_preprocess(x):
+def efficientnet_preprocess(x):
     return (x / 127.5) - 1.0
 
 @keras.saving.register_keras_serializable(package="Custom")
