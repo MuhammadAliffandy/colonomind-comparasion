@@ -23,10 +23,50 @@ import lightgbm as lgb
 
 st.set_page_config(layout="wide", page_title="Diagnostic Agent", page_icon="🔍")
 
-# Register custom objects needed for hybrid model deserialization
 @keras.saving.register_keras_serializable(package="Custom")
-def preprocessing_func(x):
+def resnet50_preprocess(x):
     return (x / 127.5) - 1.0
+
+@keras.saving.register_keras_serializable(package="Custom")
+def densenet121_preprocess(x):
+    return (x / 127.5) - 1.0
+
+@keras.saving.register_keras_serializable(package="Custom")
+def efficientnet_b4_preprocess(x):
+    return (x / 127.5) - 1.0
+
+@keras.saving.register_keras_serializable(package="Custom")
+def convnext_tiny_preprocess(x):
+    return (x / 127.5) - 1.0
+
+@keras.saving.register_keras_serializable(package="Custom")
+def vit_b16_preprocess(x):
+    return (x / 127.5) - 1.0
+
+# Patch Dense to ignore quantization_config (for older Keras versions on DGX)
+from keras.layers import Dense, Layer
+
+@keras.saving.register_keras_serializable(package="Custom")
+class CustomDense(Dense):
+    @classmethod
+    def from_config(cls, config):
+        if 'quantization_config' in config:
+            del config['quantization_config']
+        return super().from_config(config)
+
+# Dummy wrapper for ViT if it was saved with one
+@keras.saving.register_keras_serializable(package="Custom")
+class ViT_B16_Wrapper(Layer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    def call(self, inputs):
+        return inputs
+    @classmethod
+    def from_config(cls, config):
+        if 'quantization_config' in config:
+            del config['quantization_config']
+        return super().from_config(config)
+
 
 def load_all_models(base_drive, dataset_key, model_names):
     models = {}
@@ -38,7 +78,11 @@ def load_all_models(base_drive, dataset_key, model_names):
             if os.path.exists(legacy_path):
                 keras_path = legacy_path
                 
-        custom_objs = {'KerasLayer': hub.KerasLayer}
+        custom_objs = {
+            'KerasLayer': hub.KerasLayer,
+            'Dense': CustomDense,
+            'ViT_B16_Wrapper': ViT_B16_Wrapper
+        }
                 
         try:
             # safe_mode=False needed to allow Lambda layers to deserialize
