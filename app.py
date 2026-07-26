@@ -54,13 +54,20 @@ class CustomDense(Dense):
             del config['quantization_config']
         return super().from_config(config)
 
-# Dummy wrapper for ViT if it was saved with one
+# Wrapper for ViT since it was saved with a custom hub wrapper
 @keras.saving.register_keras_serializable(package="Custom")
 class ViT_B16_Wrapper(Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.vit_model = hub.load("https://tfhub.dev/sayakpaul/vit_b16_fe/1")
+        self.trainable = False
+
     def call(self, inputs):
-        return inputs
+        out = self.vit_model(inputs)
+        if isinstance(out, dict):
+            return out[list(out.keys())[0]]
+        return out
+
     @classmethod
     def from_config(cls, config):
         if 'quantization_config' in config:
