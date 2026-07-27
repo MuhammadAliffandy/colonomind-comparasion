@@ -553,15 +553,20 @@ def main():
                     fig_roc.update_layout(
                         xaxis_title="FPR" if d_idx == 1 else None,
                         yaxis_title="TPR" if d_idx == 0 else None,
-                        height=250,
-                        margin=dict(l=20, r=10, t=10, b=30),
+                        height=300, # Increased height to accommodate the legend
+                        margin=dict(l=20, r=10, t=10, b=10),
                         template="plotly_dark",
-                        showlegend=False,
+                        showlegend=True,
+                        legend=dict(
+                            orientation="h",
+                            yanchor="top",
+                            y=-0.2,
+                            xanchor="center",
+                            x=0.5,
+                            font=dict(size=10)
+                        )
                     )
                     st.plotly_chart(fig_roc, use_container_width=True)
-            
-            # Single legend at the bottom for the ROC curves
-            st.markdown(f"<div style='text-align:center; font-size:0.8rem; color:#aaa;'>Models: ResNet (Blue), DenseNet (Pink), EfficientNet (Green), ConvNeXt (Yellow), ViT (Purple)</div>", unsafe_allow_html=True)
             
     if uploaded_files is None or len(uploaded_files) == 0:
         st.info("👈 Silakan pilih pengaturan di panel kiri, lalu unggah gambar untuk memulai sesi Diagnostik (Batch Processing).")
