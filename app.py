@@ -74,7 +74,6 @@ class ViT_B16_Wrapper(Layer):
             del config['quantization_config']
         return super().from_config(config)
 
-
 def load_all_models(base_drive, dataset_key, model_names):
     models = {}
     for m in model_names:
@@ -207,6 +206,11 @@ def main():
     .label-mes2 { background:rgba(253, 126, 20, 0.15); color:#fd7e14; padding:10px 20px; border-radius:30px; font-weight:bold; font-size:1.4rem; border:2px solid #fd7e14;}
     .label-mes3 { background:rgba(248, 81, 73, 0.15); color:#f85149; padding:10px 20px; border-radius:30px; font-weight:bold; font-size:1.4rem; border:2px solid #f85149;}
     
+    .small-label-mes0 { color:#2ea043; font-weight:bold; font-size:1.1rem; border:1px solid #2ea043; padding:2px 8px; border-radius:12px; display:inline-block; margin-top:4px;}
+    .small-label-mes1 { color:#d4a017; font-weight:bold; font-size:1.1rem; border:1px solid #d4a017; padding:2px 8px; border-radius:12px; display:inline-block; margin-top:4px;}
+    .small-label-mes2 { color:#fd7e14; font-weight:bold; font-size:1.1rem; border:1px solid #fd7e14; padding:2px 8px; border-radius:12px; display:inline-block; margin-top:4px;}
+    .small-label-mes3 { color:#f85149; font-weight:bold; font-size:1.1rem; border:1px solid #f85149; padding:2px 8px; border-radius:12px; display:inline-block; margin-top:4px;}
+    
     .footer-tag {
         text-align: center;
         margin-top: 3rem;
@@ -246,7 +250,7 @@ def main():
     WAVELET       = "db1"
     BASE_DRIVE    = "./Result"
 
-    LABEL_CSS  = {"MES0": "label-mes0", "MES1": "label-mes1", "MES2": "label-mes2", "MES3": "label-mes3"}
+    SMALL_LABEL_CSS  = {"MES0": "small-label-mes0", "MES1": "small-label-mes1", "MES2": "small-label-mes2", "MES3": "small-label-mes3"}
     LABEL_DESC = {
         "MES0": "Normal Mucosa 🟢",
         "MES1": "Mild Inflammation 🟡",
@@ -376,31 +380,51 @@ def main():
                 st.error("No valid predictions from models.")
                 continue
                 
+            # --- Calculations ---
+            
+            # 1. Majority Vote
             votes = [p["label_str"] for p in valid_preds.values()]
             from collections import Counter
             vote_counts = Counter(votes)
             majority_class, majority_count = vote_counts.most_common(1)[0]
+            
+            # 2. Percentage Weight (Average Probability)
+            avg_proba = [0] * len(CLASS_NAMES)
+            for p in valid_preds.values():
+                for idx_c in range(len(CLASS_NAMES)): 
+                    avg_proba[idx_c] += p["proba"][idx_c]
+            
+            total_models = len(valid_preds)
+            weight_pred_idx = int(np.argmax(avg_proba))
+            weight_pred_str = CLASS_NAMES[weight_pred_idx]
+            weight_pred_sum_pct = avg_proba[weight_pred_idx] * 100
+            total_sum_pct = total_models * 100
+            
+            avg_proba_pct = [x / total_models for x in avg_proba]
+            
             is_ref = majority_count < voting_threshold
-            label_str = majority_class
             
-            global_severities.append(label_str)
+            # We track the weighted ensemble prediction for the global patient recommendation
+            global_severities.append(weight_pred_str)
             
-            # Left Column
+            # Left Column (Consensus & Individual)
             with c_left:
-                if is_ref:
-                    st.markdown(f"""
-                    <div style="padding:0.5rem; background-color:rgba(255,165,0,0.1); border-left:4px solid orange; border-radius:4px; margin-bottom:1rem;">
-                        <h4 style="color:orange; margin:0;">Uncertain</h4>
-                        <span>{majority_count}/{len(valid_preds)} models &rarr; <b>{label_str}</b></span>
+                st.markdown(f"""
+                <div style="padding:1rem; background-color:#161b22; border-left:4px solid #58a6ff; border-radius:6px; margin-bottom:1rem;">
+                    <h4 style="color:#58a6ff; margin-top:0; margin-bottom:12px;">Ensemble Result</h4>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <span style="color:#8b949e; font-size:0.9rem;">major vote:</span><br>
+                            <b>{majority_count}/{total_models} &rarr; {majority_class}</b>
+                        </div>
+                        <div style="border-left:1px solid #30363d; height:30px; margin:0 10px;"></div>
+                        <div>
+                            <span style="color:#8b949e; font-size:0.9rem;">weight % :</span><br>
+                            <b>{weight_pred_sum_pct:.0f}% / {total_sum_pct}% &rarr; {weight_pred_str}</b>
+                        </div>
                     </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div style="padding:0.5rem; background-color:rgba(46,160,67,0.1); border-left:4px solid #2ea043; border-radius:4px; margin-bottom:1rem;">
-                        <h4 style="color:#2ea043; margin:0;">Consensus</h4>
-                        <span>{majority_count}/{len(valid_preds)} models &rarr; <b>{label_str}</b></span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
                 
                 # Individual Models horizontally
                 st.markdown("**Individual Models:**")
@@ -409,27 +433,27 @@ def main():
                     with cols[idx]:
                         m_short = m.replace("-Experiment", "").replace("-", "")[:5]
                         st.markdown(f"""
-                        <div style="text-align:center; font-size:0.85rem; padding:0.25rem; background:#161b22; border-radius:4px;">
-                            <b>{m_short}</b><br>
-                            <span class="{LABEL_CSS.get(p['label_str'], '')}">{p['label_str']}</span><br>
-                            <span style="color:#aaa;">{p['conf']*100:.0f}%</span>
+                        <div style="text-align:center; padding:0.4rem; background:#161b22; border-radius:6px; border:1px solid #30363d; height:100%;">
+                            <b style="font-size:0.85rem;">{m_short}</b><br>
+                            <span class="{SMALL_LABEL_CSS.get(p['label_str'], '')}">{p['label_str']}</span><br>
+                            <span style="color:#aaa; font-size:0.85rem;">{p['conf']*100:.0f}%</span>
                         </div>
                         """, unsafe_allow_html=True)
 
-            # Right Column
+            # Right Column (Average Percentage Bar Chart)
             with c_right:
-                avg_proba = [0] * len(CLASS_NAMES)
-                for p in valid_preds.values():
-                    for idx_c in range(len(CLASS_NAMES)): 
-                        avg_proba[idx_c] += p["proba"][idx_c]
-                avg_proba = [x / len(valid_preds) for x in avg_proba]
-                
                 class_colors = ['#2ea043', '#d4a017', '#fd7e14', '#f85149']
-                fig_proba = go.Figure(data=[go.Bar(x=CLASS_NAMES, y=avg_proba, marker_color=class_colors, text=[f"{v*100:.1f}%" for v in avg_proba], textposition='auto')])
+                fig_proba = go.Figure(data=[go.Bar(
+                    x=CLASS_NAMES, 
+                    y=avg_proba_pct, 
+                    marker_color=class_colors, 
+                    text=[f"{v*100:.1f}%" for v in avg_proba_pct], 
+                    textposition='auto'
+                )])
                 fig_proba.update_layout(
                     title="Average Percentage Weight",
                     title_font_size=14,
-                    height=200,
+                    height=220,
                     margin=dict(l=20, r=20, t=30, b=20),
                     template="plotly_dark",
                 )
@@ -461,7 +485,7 @@ def main():
                 st.markdown(f"""
                 <div style="padding:1.5rem; background-color:#161b22; border-radius:8px; border-left:5px solid #58a6ff;">
                     <h3 style="margin-top:0;">Final Patient Adjudication</h3>
-                    <p style="font-size:1.1rem;">The most severity from this patient is <b>{max_sev}</b>.</p>
+                    <p style="font-size:1.1rem;">The most severe finding from this patient is <b>{max_sev}</b>.</p>
                     <div style="color:#c9d1d9;">{rec_text}</div>
                 </div>
                 """, unsafe_allow_html=True)
