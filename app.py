@@ -482,13 +482,10 @@ def main():
                 # The user requested to know if it's referrable. We pass is_ref=False since we only output severity text
                 rec_text = get_recommendation(max_sev, is_ref=False)
                 
-                st.markdown(f"""
-                <div style="padding:1.5rem; background-color:#161b22; border-radius:8px; border-left:5px solid #58a6ff;">
-                    <h3 style="margin-top:0;">Final Patient Adjudication</h3>
-                    <p style="font-size:1.1rem;">The most severe finding from this patient is <b>{max_sev}</b>.</p>
-                    <div style="color:#c9d1d9;">{rec_text}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown("### Final Patient Adjudication")
+                st.markdown(f"The most severe finding from this patient is **{max_sev}**.")
+                # We can use st.info or st.warning for the recommendation box to support markdown natively
+                st.info(rec_text)
                 
             with c_feat:
                 # 2. Average Top 5 Textures
