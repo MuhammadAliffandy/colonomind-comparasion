@@ -220,12 +220,14 @@ def main():
         font-size: 0.9rem;
     }
     .recommendation-box {
-        background-color: #161b22;
+        background-color: var(--secondary-background-color);
+        color: var(--text-color);
         border-left: 4px solid #58a6ff;
         padding: 1rem 1.5rem;
         border-radius: 4px;
         font-size: 1.1rem;
         line-height: 1.6;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     div[data-testid="stMetricValue"] {
         font-size: 1.8rem;
@@ -236,13 +238,44 @@ def main():
         font-weight: 600;
         letter-spacing: 1px;
     }
+    .dark-box {
+        background-color: var(--secondary-background-color);
+        color: var(--text-color);
+        padding: 1rem;
+        border-radius: 6px;
+        border: 1px solid rgba(128, 128, 128, 0.2);
+    }
+    .ensemble-box {
+        background-color: var(--secondary-background-color);
+        color: var(--text-color);
+        padding: 1rem;
+        border-left: 4px solid #58a6ff;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .model-card {
+        background-color: var(--secondary-background-color);
+        color: var(--text-color);
+        padding: 0.8rem;
+        border-radius: 8px;
+        border: 1px solid rgba(128, 128, 128, 0.2);
+        text-align: center;
+        flex: 1 1 80px;
+        min-width: 80px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .models-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
     </style>
     """, unsafe_allow_html=True)
 
     DATASET_CHOICES = {
-        "Intra_LIMUC":   "LIMUC (Intra)",
-        "Intra_TMC-UCM": "TMC-UCM (Intra)",
-        "Intra_NTUH":    "NTUH (Intra)",
+        "Intra_Unified": "Unified (TMC-UCM + NTUH + LIMUC)"
     }
     MODEL_CHOICES = ["ResNet-50", "DenseNet-121", "EfficientNet-B4", "ConvNeXt-Tiny", "ViT-B-16"]
     CLASS_NAMES   = ["MES0", "MES1", "MES2", "MES3"]
@@ -388,29 +421,28 @@ def main():
             vote_counts = Counter(votes)
             majority_class, majority_count = vote_counts.most_common(1)[0]
             
-            # 2. Percentage Weight (Average Probability)
+            # 2. Most Severe Logic
+            max_severity_idx = max([p["label_idx"] for p in valid_preds.values()])
+            most_severe_str = CLASS_NAMES[max_severity_idx]
+            
+            # 3. Average Probability
             avg_proba = [0] * len(CLASS_NAMES)
             for p in valid_preds.values():
                 for idx_c in range(len(CLASS_NAMES)): 
                     avg_proba[idx_c] += p["proba"][idx_c]
             
             total_models = len(valid_preds)
-            weight_pred_idx = int(np.argmax(avg_proba))
-            weight_pred_str = CLASS_NAMES[weight_pred_idx]
-            weight_pred_sum_pct = avg_proba[weight_pred_idx] * 100
-            total_sum_pct = total_models * 100
-            
             avg_proba_pct = [x / total_models for x in avg_proba]
             
             is_ref = majority_count < voting_threshold
             
-            # We track the weighted ensemble prediction for the global patient recommendation
-            global_severities.append(weight_pred_str)
+            # We track the MOST SEVERE ensemble prediction for the global patient recommendation
+            global_severities.append(most_severe_str)
             
             # Left Column (Consensus & Individual)
             with c_left:
                 st.markdown(f"""
-                <div style="padding:1rem; background-color:#161b22; border-left:4px solid #58a6ff; border-radius:6px; margin-bottom:1rem;">
+                <div class="ensemble-box">
                     <h4 style="color:#58a6ff; margin-top:0; margin-bottom:12px;">Ensemble Result</h4>
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
@@ -419,26 +451,27 @@ def main():
                         </div>
                         <div style="border-left:1px solid #30363d; height:30px; margin:0 10px;"></div>
                         <div>
-                            <span style="color:#8b949e; font-size:0.9rem;">weight % :</span><br>
-                            <b>{weight_pred_sum_pct:.0f}% / {total_sum_pct}% &rarr; {weight_pred_str}</b>
+                            <span style="color:#8b949e; font-size:0.9rem;">most severe:</span><br>
+                            <b>Safe-fail &rarr; {most_severe_str}</b>
                         </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Individual Models horizontally
+                # Individual Models using Flexbox for responsiveness
                 st.markdown("**Individual Models:**")
-                cols = st.columns(len(valid_preds))
-                for idx, (m, p) in enumerate(valid_preds.items()):
-                    with cols[idx]:
-                        m_short = m.replace("-Experiment", "").replace("-", "")[:5]
-                        st.markdown(f"""
-                        <div style="text-align:center; padding:0.4rem; background:#161b22; border-radius:6px; border:1px solid #30363d; height:100%;">
-                            <b style="font-size:0.85rem;">{m_short}</b><br>
-                            <span class="{SMALL_LABEL_CSS.get(p['label_str'], '')}">{p['label_str']}</span><br>
-                            <span style="color:#aaa; font-size:0.85rem;">{p['conf']*100:.0f}%</span>
-                        </div>
-                        """, unsafe_allow_html=True)
+                models_html = '<div class="models-container">'
+                for m, p in valid_preds.items():
+                    m_short = m.replace("-Experiment", "").replace("-", "")[:5]
+                    models_html += f"""
+                    <div class="model-card">
+                        <b style="font-size:0.85rem;">{m_short}</b><br>
+                        <span class="{SMALL_LABEL_CSS.get(p['label_str'], '')}">{p['label_str']}</span><br>
+                        <span style="opacity:0.7; font-size:0.85rem;">{p['conf']*100:.0f}%</span>
+                    </div>
+                    """
+                models_html += '</div>'
+                st.markdown(models_html, unsafe_allow_html=True)
 
             # Right Column (Average Percentage Bar Chart)
             with c_right:
