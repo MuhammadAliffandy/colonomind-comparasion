@@ -281,7 +281,7 @@ def main():
     CLASS_NAMES   = ["MES0", "MES1", "MES2", "MES3"]
     IMG_SIZE      = (224, 224)
     WAVELET       = "db1"
-    BASE_DRIVE    = "../Result"
+    BASE_DRIVE    = "../colonomind-train/Result"
 
     SMALL_LABEL_CSS  = {"MES0": "small-label-mes0", "MES1": "small-label-mes1", "MES2": "small-label-mes2", "MES3": "small-label-mes3"}
     LABEL_DESC = {
