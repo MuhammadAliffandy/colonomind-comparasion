@@ -463,13 +463,11 @@ def main():
                 models_html = '<div class="models-container">'
                 for m, p in valid_preds.items():
                     m_short = m.replace("-Experiment", "").replace("-", "")[:5]
-                    models_html += f"""
-                    <div class="model-card">
-                        <b style="font-size:0.85rem;">{m_short}</b><br>
-                        <span class="{SMALL_LABEL_CSS.get(p['label_str'], '')}">{p['label_str']}</span><br>
-                        <span style="opacity:0.7; font-size:0.85rem;">{p['conf']*100:.0f}%</span>
-                    </div>
-                    """
+                    models_html += f"""<div class="model-card">
+<b style="font-size:0.85rem;">{m_short}</b><br>
+<span class="{SMALL_LABEL_CSS.get(p['label_str'], '')}">{p['label_str']}</span><br>
+<span style="opacity:0.7; font-size:0.85rem;">{p['conf']*100:.0f}%</span>
+</div>"""
                 models_html += '</div>'
                 st.markdown(models_html, unsafe_allow_html=True)
 
