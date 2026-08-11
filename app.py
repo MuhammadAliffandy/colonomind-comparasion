@@ -550,8 +550,8 @@ def main():
             
             roc_cols = st.columns(3)
             datasets_roc = ["TMC-UCM", "NTUH", "LIMUC"]
-            # Mock AUC base values for datasets (NTUH is base, TMC is slightly worse, LIMUC slightly better)
-            auc_offsets = {"TMC-UCM": -0.02, "NTUH": 0.0, "LIMUC": +0.015}
+            # Mock AUC base values for datasets (TMC-UCM is highest, NTUH drops slightly, LIMUC drops more)
+            auc_offsets = {"TMC-UCM": +0.02, "NTUH": 0.0, "LIMUC": -0.015}
             
             MODEL_METRICS = {
                 "ResNet-50": 0.92,
