@@ -329,31 +329,41 @@ def main():
         st.markdown("---")
 
     def get_recommendation(label_str, is_ref):
-        severity_map = {
-            "MES0": "remission",
-            "MES1": "mild",
-            "MES2": "moderate",
-            "MES3": "severe"
-        }
-        severity = severity_map[label_str]
+        base_text = "<b>All MES grades</b><br>" \
+                    "• Confirm the uploaded image reflected the most severely inflamed segment as a single image may not be representative for the whole colon.<br><br>"
         
         if label_str == "MES0":
-            text = f"The patient has achieved **endoscopic remission**. <br><br>" \
-                   f"**Action:** These medications were safe to be continued. " \
-                   f"Screening colonoscopy should be scheduled according to routine interval."
+            text = "<b>MES 0: normal or inactive disease.</b><br>" \
+                   "• Record that long-term treat-to-target endpoint of endoscopic remission is achieved.<br>" \
+                   "• Obtain biopsies to assess for histologic status. Reaching histologic remission results in incremental benefits beyond endoscopic remission.<br>" \
+                   "• Consider keeping current maintenance treatment.<br>" \
+                   "• Schedule non-invasive monitoring (fecal calprotectin, C-reactive protein, intestinal ultrasound) every 6-12 months."
         elif label_str == "MES1":
-            text = f"The patient has **{severity}** inflammation. <br><br>" \
-                   f"**Action:** The patient has achieved intermediate treatment target. " \
-                   f"Based on the patient demographics and severity, the recommended next option is: Optimize current medication."
+            text = "<b>MES 1: mild inflammation.</b><br>" \
+                   "• MES 1 belongs to the broad definition of endoscopic healing. However, note the inferior disease outcomes compared to MES 0. Consider MES 0 as the preferred target.<br>" \
+                   "• Obtain biopsies to assess for histologic status. Reaching histologic remission results in incremental benefits beyond endoscopic remission.<br>" \
+                   "• Confirm adherence to maintenance therapy.<br>" \
+                   "• Schedule non-invasive monitoring (fecal calprotectin, C-reactive protein, intestinal ultrasound) at shorter interval rather than symptom-based review alone."
+        elif label_str == "MES2":
+            text = "<b>MES 2: moderate inflammation.</b><br>" \
+                   "• Endoscopic remission as the long-term target is not achieved. Suggest reviewing current treatment and confirming the adherence.<br>" \
+                   "• Exclude enteric infection before escalating therapy, especially Clostridioides difficile.<br>" \
+                   "• Obtain biopsies to assess for cytomegalovirus inclusion bodies and immunohistochemistry test.<br>" \
+                   "• After treatment adjustment, schedule non-invasive monitoring (fecal calprotectin, C-reactive protein, intestinal ultrasound) at a defined shorter interval (based on medication used) to confirm objective response."
+        elif label_str == "MES3":
+            text = "<b>MES 3: severe inflammation.</b><br>" \
+                   "• Endoscopic remission as the long-term target is not achieved. Suggest confirming the adherence and assessing for escalation.<br>" \
+                   "• Exclude enteric infection before escalating therapy, especially Clostridioides difficile.<br>" \
+                   "• Obtain biopsies to assess for cytomegalovirus inclusion bodies and immunohistochemistry test.<br>" \
+                   "• Assess whether the clinical criteria for acute severe ulcerative colitis, such as the Truelove and Witts criteria are met."
         else:
-            text = f"The patient has **{severity}** inflammation. <br><br>" \
-                   f"**Action:** The current medication should be adjusted. " \
-                   f"Based on the patient demographics, extent, severity, and current medication failure, the recommended next option is: Escalate to advanced therapy or combine other advanced therapy."
+            text = ""
                    
+        final_text = base_text + text
         if is_ref:
-            text += "<br><br>⚠️ **Warning:** Prediction uncertainty is high (Consensus < Threshold). Clinical correlation and specialist referral needed."
+            final_text += "<br><br>⚠️ <b>Warning:</b> Prediction uncertainty is high (Consensus &lt; Threshold). Clinical correlation and specialist referral needed."
             
-        return text
+        return final_text
 
     # Main Header
     st.markdown("""
@@ -489,6 +499,11 @@ def main():
                     template="plotly_dark",
                 )
                 st.plotly_chart(fig_proba, use_container_width=True)
+                
+            # Per-Image Recommendation based on Most Severe rule
+            st.markdown("#### Clinical Recommendation")
+            rec_text = get_recommendation(most_severe_str, is_ref=is_ref)
+            st.markdown(f"<div class='recommendation-box'>{rec_text}</div><br>", unsafe_allow_html=True)
 
             # Accumulate features for the aggregate view
             for m, p in valid_preds.items():
@@ -503,44 +518,28 @@ def main():
         if len(global_severities) > 0:
             st.subheader("Global Patient Metrics")
             
-            c_rec, c_feat = st.columns([1, 1], gap="large")
-            
-            with c_rec:
-                # 1. Adjudication Agent (Suggestion)
-                # Severities mapping MES0 < MES1 < MES2 < MES3
-                max_sev = max(global_severities, key=lambda x: int(x[-1]))
-                # Use majority logic for referral of final max severity?
-                # The user requested to know if it's referrable. We pass is_ref=False since we only output severity text
-                rec_text = get_recommendation(max_sev, is_ref=False)
+            # 2. Average Top 5 Textures
+            st.markdown("**Top 5 Handcrafted Features (Average)**")
+            if len(global_features_list) > 0:
+                avg_feats = np.mean(global_features_list, axis=0)
+                abs_vals = [abs(v) for v in avg_feats]
+                indexed = sorted(enumerate(abs_vals), key=lambda x: x[1], reverse=True)[:5]
+                top_5_names = [FEAT_NAMES[idx] for idx, _ in indexed]
+                top_5_vals  = [float(avg_feats[idx]) for idx, _ in indexed]
                 
-                st.markdown("### Final Patient Adjudication")
-                st.markdown(f"The most severe finding from this patient is **{max_sev}**.")
-                # We can use st.info or st.warning for the recommendation box to support markdown natively
-                st.info(rec_text)
-                
-            with c_feat:
-                # 2. Average Top 5 Textures
-                st.markdown("**Top 5 Handcrafted Features (Average)**")
-                if len(global_features_list) > 0:
-                    avg_feats = np.mean(global_features_list, axis=0)
-                    abs_vals = [abs(v) for v in avg_feats]
-                    indexed = sorted(enumerate(abs_vals), key=lambda x: x[1], reverse=True)[:5]
-                    top_5_names = [FEAT_NAMES[idx] for idx, _ in indexed]
-                    top_5_vals  = [float(avg_feats[idx]) for idx, _ in indexed]
-                    
-                    fig_top5 = go.Figure(data=[go.Bar(
-                        x=top_5_vals[::-1], # reverse for horizontal
-                        y=top_5_names[::-1],
-                        orientation='h',
-                        marker_color='#ed64a6'
-                    )])
-                    fig_top5.update_layout(
-                        height=250,
-                        margin=dict(l=10, r=10, t=10, b=10),
-                        template="plotly_dark",
-                        xaxis_title="Average Scaled Value"
-                    )
-                    st.plotly_chart(fig_top5, use_container_width=True)
+                fig_top5 = go.Figure(data=[go.Bar(
+                    x=top_5_vals[::-1], # reverse for horizontal
+                    y=top_5_names[::-1],
+                    orientation='h',
+                    marker_color='#ed64a6'
+                )])
+                fig_top5.update_layout(
+                    height=250,
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    template="plotly_dark",
+                    xaxis_title="Average Scaled Value"
+                )
+                st.plotly_chart(fig_top5, use_container_width=True)
 
             st.divider()
             
