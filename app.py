@@ -310,9 +310,9 @@ def main():
         st.markdown("## ⚙️ Configuration")
         st.markdown("---")
         
-        st.subheader("📁 1. Source Directory")
+        st.subheader("📁 1. Dataset")
         
-        # Scan multiple possible locations for Result folders
+        # Scan multiple possible locations for Result folders in the background
         search_paths = [".", "..", "../colonomind-train"]
         available_bases = []
         for sp in search_paths:
@@ -320,37 +320,33 @@ def main():
                 for d in os.listdir(sp):
                     full_path = os.path.join(sp, d)
                     if os.path.isdir(full_path) and d.lower().startswith("result"):
-                        # Keep track of the full path but make it look nice if possible
                         available_bases.append(full_path)
         
-        # Remove duplicates by realpath
+        # Remove duplicates by realpath and prioritize shorter/standard names like 'Result'
         unique_bases = {}
         for p in available_bases:
             unique_bases[os.path.realpath(p)] = p
-        available_bases = sorted(list(unique_bases.values()))
+        # Sort so that standard 'Result' comes last and overwrites others if duplicates exist
+        sorted_bases = sorted(list(unique_bases.values()), key=lambda x: (len(x), x), reverse=True)
         
-        if not available_bases:
-            available_bases = ["./Result"]
+        dataset_to_base = {}
+        for base_drive in sorted_bases:
+            if os.path.exists(base_drive):
+                for d in os.listdir(base_drive):
+                    if os.path.isdir(os.path.join(base_drive, d)):
+                        # If multiple bases have the same dataset, we prioritize the one from 'Result'
+                        # Because we reversed the sort, 'Result' will be processed last and overwrite older ones.
+                        dataset_to_base[d] = base_drive
         
-        base_drive = st.selectbox(
-            "Select Model Source", 
-            available_bases, 
-            index=0,
-            format_func=lambda x: os.path.basename(x)
-        )
-        BASE_DRIVE = base_drive
+        available_datasets = sorted(list(dataset_to_base.keys()))
         
-        st.subheader("📁 2. Dataset / Unified")
-        if os.path.exists(BASE_DRIVE):
-            available_datasets = sorted([d for d in os.listdir(BASE_DRIVE) if os.path.isdir(os.path.join(BASE_DRIVE, d))])
-            if available_datasets:
-                selected_dataset_key = st.selectbox("Select Dataset", available_datasets, index=0)
-            else:
-                st.error(f"⚠️ No dataset folders found in {BASE_DRIVE}/")
-                selected_dataset_key = "Unknown"
+        if available_datasets:
+            selected_dataset_key = st.selectbox("Select Dataset", available_datasets, index=0)
+            BASE_DRIVE = dataset_to_base[selected_dataset_key]
         else:
-            st.error(f"⚠️ {BASE_DRIVE} directory not found.")
+            st.error("⚠️ No dataset folders found in any Result directories.")
             selected_dataset_key = "Unknown"
+            BASE_DRIVE = "./Result"
             
         st.markdown("---")
         st.subheader("🤖 2. Ensemble Settings")
