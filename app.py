@@ -113,8 +113,8 @@ def load_all_models(base_drive, dataset_key, model_names):
             models[m]["error"] = error_msg
     return models
 
-def extract_handcrafted_features(img_arr, WAVELET="db1"):
-    gray = cv2.cvtColor(cv2.resize(img_arr, (224, 224)), cv2.COLOR_RGB2GRAY)
+def extract_handcrafted_features(img_arr, target_size=(224, 224), WAVELET="db1"):
+    gray = cv2.cvtColor(cv2.resize(img_arr, target_size), cv2.COLOR_RGB2GRAY)
     coeffs2 = pywt.dwt2(gray, WAVELET)
     LL, (LH, HL, HH) = coeffs2
     def stats(sb):
@@ -141,10 +141,17 @@ def predict_single_image(img_arr, model_dict):
     if None in [dl_model, umap_model, base_scaler, agent_scaler, agent]:
         return {"error": "Missing model files or failed to load"}
         
-    img_resized = cv2.resize(img_arr, (224, 224))
+    # Dynamically detect input shape
+    try:
+        input_shape = dl_model.inputs[0].shape
+        target_h, target_w = int(input_shape[1]), int(input_shape[2])
+    except:
+        target_h, target_w = 224, 224
+        
+    img_resized = cv2.resize(img_arr, (target_w, target_h))
     img_rgb = np.expand_dims(img_resized, axis=0) 
     
-    h_feats = extract_handcrafted_features(img_arr)
+    h_feats = extract_handcrafted_features(img_arr, target_size=(target_w, target_h))
     feats_scaled = base_scaler.transform(np.array(h_feats).reshape(1, -1))
     umap_feat = umap_model.transform(feats_scaled)
     
@@ -302,20 +309,25 @@ def main():
     with st.sidebar:
         st.markdown("## ⚙️ Configuration")
         st.markdown("---")
-        st.subheader("📁 1. Dataset")
         
-        # Auto-detect dataset folder inside BASE_DRIVE
+        st.subheader("📁 1. Source Directory")
+        available_bases = sorted([d for d in os.listdir(".") if os.path.isdir(d) and d.lower().startswith("result")])
+        if not available_bases:
+            available_bases = ["./Result"]
+        
+        base_drive = st.selectbox("Select Model Source", available_bases, index=0)
+        BASE_DRIVE = f"./{base_drive}" if not base_drive.startswith("./") else base_drive
+        
+        st.subheader("📁 2. Dataset / Unified")
         if os.path.exists(BASE_DRIVE):
-            available_datasets = [d for d in os.listdir(BASE_DRIVE) if os.path.isdir(os.path.join(BASE_DRIVE, d))]
+            available_datasets = sorted([d for d in os.listdir(BASE_DRIVE) if os.path.isdir(os.path.join(BASE_DRIVE, d))])
             if available_datasets:
-                selected_dataset_key = available_datasets[0]
-                pretty_name = DATASET_CHOICES.get(selected_dataset_key, selected_dataset_key)
-                st.markdown(f"**Auto-selected:** `{pretty_name}`")
+                selected_dataset_key = st.selectbox("Select Dataset", available_datasets, index=0)
             else:
-                st.error("⚠️ No dataset folders found in ./Result/")
+                st.error(f"⚠️ No dataset folders found in {BASE_DRIVE}/")
                 selected_dataset_key = "Unknown"
         else:
-            st.error("⚠️ ./Result directory not found.")
+            st.error(f"⚠️ {BASE_DRIVE} directory not found.")
             selected_dataset_key = "Unknown"
             
         st.markdown("---")
