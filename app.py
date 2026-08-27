@@ -332,7 +332,12 @@ def main():
         if not available_bases:
             available_bases = ["./Result"]
         
-        base_drive = st.selectbox("Select Model Source", available_bases, index=0)
+        base_drive = st.selectbox(
+            "Select Model Source", 
+            available_bases, 
+            index=0,
+            format_func=lambda x: os.path.basename(x)
+        )
         BASE_DRIVE = base_drive
         
         st.subheader("📁 2. Dataset / Unified")
