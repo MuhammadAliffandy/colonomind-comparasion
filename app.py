@@ -74,43 +74,50 @@ class ViT_B16_Wrapper(Layer):
             del config['quantization_config']
         return super().from_config(config)
 
-def load_all_models(base_drive, dataset_key, model_names):
+def load_all_models(base_drive, dataset_key, model_names, all_bases):
     models = {}
+    custom_objs = {
+        'KerasLayer': hub.KerasLayer,
+        'Dense': CustomDense,
+        'ViT_B16_Wrapper': ViT_B16_Wrapper
+    }
     for m in model_names:
-        exp_dir = os.path.join(base_drive, dataset_key, f"{m}_Experiment")
-        keras_path = os.path.join(exp_dir, f"{m}_hybrid.keras")
-        if not os.path.exists(keras_path):
-            legacy_path = os.path.join(exp_dir, f"{m}_hybrid.h5")
-            if os.path.exists(legacy_path):
-                keras_path = legacy_path
+        models[m] = {"error": "Model files not found"}
+        # Try finding a working model from the primary base_drive first, then fallback to others
+        search_drives = [base_drive] + [b for b in all_bases if b != base_drive]
+        
+        for bd in search_drives:
+            exp_dir = os.path.join(bd, dataset_key, f"{m}_Experiment")
+            if not os.path.exists(exp_dir):
+                continue
                 
-        custom_objs = {
-            'KerasLayer': hub.KerasLayer,
-            'Dense': CustomDense,
-            'ViT_B16_Wrapper': ViT_B16_Wrapper
-        }
+            keras_path = os.path.join(exp_dir, f"{m}_hybrid.keras")
+            if not os.path.exists(keras_path):
+                legacy_path = os.path.join(exp_dir, f"{m}_hybrid.h5")
+                if os.path.exists(legacy_path):
+                    keras_path = legacy_path
+            
+            if not os.path.exists(keras_path):
+                continue
                 
-        try:
-            # safe_mode=False needed to allow Lambda layers to deserialize
-            dl_model = load_model(keras_path, compile=False, custom_objects=custom_objs, safe_mode=False)
-        except Exception as e:
-            error_msg = f"Keras Load Error: {e}"
-            print(f"Error loading {keras_path}: {e}")
-            dl_model = None
-            
-        try:
-            umap_model = joblib.load(os.path.join(exp_dir, "umap_model.pkl"))
-            base_scaler = joblib.load(os.path.join(exp_dir, "base_scaler.pkl"))
-            agent_scaler = joblib.load(os.path.join(exp_dir, f"{m}_scaler.pkl"))
-            agent = lgb.Booster(model_file=os.path.join(exp_dir, f"{m}_agent.txt"))
-        except Exception as e:
-            error_msg = f"PKL/Agent Load Error: {e}"
-            print(f"Error loading PKL/Agent for {m}: {e}")
-            umap_model, base_scaler, agent_scaler, agent = None, None, None, None
-            
-        models[m] = {"dl": dl_model, "umap": umap_model, "base_scaler": base_scaler, "agent_scaler": agent_scaler, "agent": agent}
-        if None in models[m].values():
-            models[m]["error"] = error_msg
+            try:
+                dl_model = load_model(keras_path, compile=False, custom_objects=custom_objs, safe_mode=False)
+                umap_model = joblib.load(os.path.join(exp_dir, "umap_model.pkl"))
+                base_scaler = joblib.load(os.path.join(exp_dir, "base_scaler.pkl"))
+                agent_scaler = joblib.load(os.path.join(exp_dir, f"{m}_scaler.pkl"))
+                agent = lgb.Booster(model_file=os.path.join(exp_dir, f"{m}_agent.txt"))
+                
+                models[m] = {"dl": dl_model, "umap": umap_model, "base_scaler": base_scaler, "agent_scaler": agent_scaler, "agent": agent}
+                # Successfully loaded, break out of the search_drives loop
+                if "error" in models[m]:
+                    del models[m]["error"]
+                break
+            except Exception as e:
+                error_msg = f"Load Error from {bd}: {e}"
+                print(error_msg)
+                models[m] = {"error": error_msg}
+                # Continue loop to try fallback directories
+                
     return models
 
 def extract_handcrafted_features(img_arr, target_size=(224, 224), WAVELET="db1"):
@@ -155,7 +162,9 @@ def predict_single_image(img_arr, model_dict):
     feats_scaled = base_scaler.transform(np.array(h_feats).reshape(1, -1))
     umap_feat = umap_model.transform(feats_scaled)
     
-    dl_proba = dl_model.predict([img_rgb, feats_scaled, umap_feat], verbose=0)[0]
+    # Use direct call instead of .predict() to avoid memory leaks in loops
+    out_tensor = dl_model([img_rgb, feats_scaled, umap_feat], training=False)
+    dl_proba = out_tensor.numpy()[0] if hasattr(out_tensor, 'numpy') else out_tensor[0]
     dl_conf = float(np.max(dl_proba))
     
     if dl_conf >= 0.50:
@@ -421,7 +430,7 @@ def main():
         models_to_run = MODEL_CHOICES
         
         # Pre-load models in memory once for all images
-        loaded_models = load_all_models(BASE_DRIVE, selected_dataset_key, models_to_run)
+        loaded_models = load_all_models(BASE_DRIVE, selected_dataset_key, models_to_run, sorted_bases)
         
         global_features_list = []
         global_severities = []
@@ -528,7 +537,7 @@ def main():
                     margin=dict(l=20, r=20, t=30, b=20),
                     template="plotly_dark",
                 )
-                st.plotly_chart(fig_proba, use_container_width=True)
+                st.plotly_chart(fig_proba, use_container_width=True, key=f"proba_{i}")
                 
             # Per-Image Recommendation based on Most Severe rule
             st.markdown("#### Clinical Recommendation")
