@@ -311,12 +311,29 @@ def main():
         st.markdown("---")
         
         st.subheader("📁 1. Source Directory")
-        available_bases = sorted([d for d in os.listdir(".") if os.path.isdir(d) and d.lower().startswith("result")])
+        
+        # Scan multiple possible locations for Result folders
+        search_paths = [".", "..", "../colonomind-train"]
+        available_bases = []
+        for sp in search_paths:
+            if os.path.exists(sp):
+                for d in os.listdir(sp):
+                    full_path = os.path.join(sp, d)
+                    if os.path.isdir(full_path) and d.lower().startswith("result"):
+                        # Keep track of the full path but make it look nice if possible
+                        available_bases.append(full_path)
+        
+        # Remove duplicates by realpath
+        unique_bases = {}
+        for p in available_bases:
+            unique_bases[os.path.realpath(p)] = p
+        available_bases = sorted(list(unique_bases.values()))
+        
         if not available_bases:
             available_bases = ["./Result"]
         
         base_drive = st.selectbox("Select Model Source", available_bases, index=0)
-        BASE_DRIVE = f"./{base_drive}" if not base_drive.startswith("./") else base_drive
+        BASE_DRIVE = base_drive
         
         st.subheader("📁 2. Dataset / Unified")
         if os.path.exists(BASE_DRIVE):
