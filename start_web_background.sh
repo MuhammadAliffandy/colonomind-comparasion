@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-PORT="${1:-8502}"
+PORT="${1:-8501}"
 NGROK_URL="https://backtrack-emcee-numbness.ngrok-free.dev"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
@@ -48,40 +48,64 @@ if [[ -f "$NGROK_PID_FILE" ]] && kill -0 "$(<"$NGROK_PID_FILE")" 2>/dev/null; th
     printf 'Ngrok tampaknya sudah berjalan (PID %s). Hentikan dulu dengan ./stop_web_background.sh %s\n' "$(<"$NGROK_PID_FILE")" "$PORT" >&2
     exit 1
 fi
-if "$PYTHON" -c 'import socket,sys
+if command -v curl >/dev/null 2>&1 && curl -fsS "http://127.0.0.1:$PORT/_stcore/health" >/dev/null 2>&1; then
+    STREAMLIT_PID="$("$PYTHON" - "$PORT" "$SCRIPT_DIR" <<'PY'
+import os
+import subprocess
+import sys
+
+port, project_dir = sys.argv[1], os.path.realpath(sys.argv[2])
+for row in subprocess.check_output(["ps", "-eo", "pid=,args="], text=True).splitlines():
+    pid, _, args = row.strip().partition(" ")
+    if "streamlit run app.py" not in args or f"--server.port {port}" not in args:
+        continue
+    if os.path.realpath(f"/proc/{pid}/cwd") == project_dir:
+        print(pid)
+        break
+PY
+    )"
+    if [[ -z "$STREAMLIT_PID" ]]; then
+        printf 'Port %s merespons sebagai Streamlit, tetapi bukan app.py dari folder proyek ini. Ngrok tidak dijalankan.\n' "$PORT" >&2
+        exit 1
+    fi
+    printf '%s\n' "$STREAMLIT_PID" >"$STREAMLIT_PID_FILE"
+    printf 'Memakai Streamlit ColonoMind yang sudah aktif (PID %s).\n' "$STREAMLIT_PID"
+else
+    if "$PYTHON" -c 'import socket,sys
 try:
     socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1).close()
 except OSError:
     raise SystemExit(1)
 raise SystemExit(0)' "$PORT"; then
-    printf 'Port %s sudah dipakai. Tidak menjalankan tunnel agar tidak tersambung ke aplikasi lain. Cek prosesnya atau pilih port lain.\n' "$PORT" >&2
-    exit 1
-fi
+        printf 'Port %s sudah dipakai layanan lain. Ngrok tidak dijalankan.\n' "$PORT" >&2
+        exit 1
+    fi
 
-nohup "$PYTHON" -m streamlit run "$SCRIPT_DIR/app.py" \
-    --server.port "$PORT" \
-    --server.address 127.0.0.1 \
-    --server.headless true >"$STREAMLIT_LOG" 2>&1 </dev/null &
-STREAMLIT_PID=$!
-printf '%s\n' "$STREAMLIT_PID" >"$STREAMLIT_PID_FILE"
+    nohup "$PYTHON" -m streamlit run "$SCRIPT_DIR/app.py" \
+        --server.port "$PORT" \
+        --server.address 127.0.0.1 \
+        --server.headless true >"$STREAMLIT_LOG" 2>&1 </dev/null &
+    STREAMLIT_PID=$!
+    printf '%s\n' "$STREAMLIT_PID" >"$STREAMLIT_PID_FILE"
 
-for _ in {1..30}; do
-    if ! kill -0 "$STREAMLIT_PID" 2>/dev/null; then
-        printf 'Streamlit gagal mulai. Lihat %s\n' "$STREAMLIT_LOG" >&2
+    for _ in {1..30}; do
+        if ! kill -0 "$STREAMLIT_PID" 2>/dev/null; then
+            printf 'Streamlit gagal mulai. Lihat %s\n' "$STREAMLIT_LOG" >&2
+            rm -f "$STREAMLIT_PID_FILE"
+            exit 1
+        fi
+        if command -v curl >/dev/null 2>&1 && curl -fsS "http://127.0.0.1:$PORT/_stcore/health" >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! command -v curl >/dev/null 2>&1 || ! curl -fsS "http://127.0.0.1:$PORT/_stcore/health" >/dev/null 2>&1; then
+        printf 'Streamlit belum merespons pada port %s. Lihat %s\n' "$PORT" "$STREAMLIT_LOG" >&2
+        kill "$STREAMLIT_PID" 2>/dev/null || true
         rm -f "$STREAMLIT_PID_FILE"
         exit 1
     fi
-    if command -v curl >/dev/null 2>&1 && curl -fsS "http://127.0.0.1:$PORT/_stcore/health" >/dev/null 2>&1; then
-        break
-    fi
-    sleep 1
-done
-
-if ! command -v curl >/dev/null 2>&1 || ! curl -fsS "http://127.0.0.1:$PORT/_stcore/health" >/dev/null 2>&1; then
-    printf 'Streamlit belum merespons pada port %s. Lihat %s\n' "$PORT" "$STREAMLIT_LOG" >&2
-    kill "$STREAMLIT_PID" 2>/dev/null || true
-    rm -f "$STREAMLIT_PID_FILE"
-    exit 1
 fi
 
 nohup ngrok http "http://127.0.0.1:$PORT" --log=stdout --log-format=logfmt >"$NGROK_LOG" 2>&1 </dev/null &
