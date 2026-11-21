@@ -111,7 +111,7 @@ Atau untuk akses dari jaringan lain: **`http://<IP_SERVER>:8501`**
 
 ### Jalankan Streamlit lewat ngrok di background
 
-Jalankan dari root proyek pada DGX. Skrip membuka tunnel ke `http://127.0.0.1:8501` pada URL tetap `https://backtrack-emcee-numbness.ngrok-free.dev`. Ngrok tetap memakai YAML default dan authtoken yang sudah tersimpan untuk user tersebut.
+Jalankan dari root proyek pada DGX. Skrip menjalankan `ngrok http http://127.0.0.1:8501` memakai YAML default tanpa override URL. Ngrok akan menggunakan domain default akun; log tunnel ColonoMind dibaca dari file log proyek supaya status URL tidak tertukar dengan tunnel Brain.
 
 ```bash
 chmod +x start_web_background.sh stop_web_background.sh check_web_status.sh

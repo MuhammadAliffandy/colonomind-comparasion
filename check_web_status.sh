@@ -25,16 +25,10 @@ else
     printf 'Aplikasi: tidak merespons pada port %s\n' "$PORT"
 fi
 
-if command -v curl >/dev/null 2>&1; then
-    URL="$(curl -fsS http://127.0.0.1:4040/api/tunnels 2>/dev/null | python3 -c 'import json,sys
-try:
-    data=json.load(sys.stdin)
-    print(next((t["public_url"] for t in data.get("tunnels", []) if t.get("public_url", "").rstrip("/") == "https://backtrack-emcee-numbness.ngrok-free.dev"), ""))
-except Exception:
-    pass' 2>/dev/null || true)"
-    if [[ -n "$URL" ]]; then
-        printf 'URL ngrok: %s\n' "$URL"
-    else
-        printf 'URL ngrok: belum tersedia\n'
-    fi
+NGROK_LOG="$SCRIPT_DIR/logs/ngrok_${PORT}.log"
+URL="$(grep -oE 'url=https://[^[:space:]\"]+' "$NGROK_LOG" 2>/dev/null | sed 's/^url=//' | grep -Fx 'https://backtrack-emcee-numbness.ngrok-free.dev' | tail -n 1 || true)"
+if [[ -n "$URL" ]]; then
+    printf 'URL ngrok: %s\n' "$URL"
+else
+    printf 'URL ngrok: belum tersedia\n'
 fi

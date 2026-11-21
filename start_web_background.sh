@@ -75,7 +75,7 @@ if ! command -v curl >/dev/null 2>&1 || ! curl -fsS "http://127.0.0.1:$PORT/_stc
     exit 1
 fi
 
-nohup ngrok http "http://127.0.0.1:$PORT" --url "$NGROK_URL" >"$NGROK_LOG" 2>&1 </dev/null &
+nohup ngrok http "http://127.0.0.1:$PORT" --log=stdout --log-format=logfmt >"$NGROK_LOG" 2>&1 </dev/null &
 NGROK_PID=$!
 printf '%s\n' "$NGROK_PID" >"$NGROK_PID_FILE"
 
@@ -83,12 +83,7 @@ for _ in {1..20}; do
     if ! kill -0 "$NGROK_PID" 2>/dev/null; then
         break
     fi
-ACTIVE_NGROK_URL="$("$PYTHON" -c 'import json,sys,urllib.request
-try:
-    data=json.load(urllib.request.urlopen("http://127.0.0.1:4040/api/tunnels", timeout=1))
-    print(next((t["public_url"] for t in data.get("tunnels", []) if t.get("public_url", "").rstrip("/") == "https://backtrack-emcee-numbness.ngrok-free.dev"), ""))
-except Exception:
-    pass' 2>/dev/null || true)"
+    ACTIVE_NGROK_URL="$(grep -oE 'url=https://[^[:space:]\"]+' "$NGROK_LOG" 2>/dev/null | sed 's/^url=//' | grep -Fx "$NGROK_URL" | tail -n 1 || true)"
     [[ -n "$ACTIVE_NGROK_URL" ]] && break
     sleep 1
 done
