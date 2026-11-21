@@ -109,6 +109,18 @@ streamlit run app.py
 Buka browser dan akses: **`http://localhost:8501`**  
 Atau untuk akses dari jaringan lain: **`http://<IP_SERVER>:8501`**
 
+### Jalankan Streamlit lewat ngrok di background
+
+Jalankan dari root proyek pada DGX. Skrip memakai konfigurasi ngrok default milik user yang menjalankannya, termasuk file YAML dan authtoken yang sudah tersimpan di sana:
+
+```bash
+chmod +x start_web_background.sh stop_web_background.sh check_web_status.sh
+./start_web_background.sh          # port default 8501
+./start_web_background.sh 8502    # jika ingin memakai port lain
+```
+
+Skrip memakai `venv/` proyek jika tersedia dan mencatat log di `logs/`. Periksa URL publik dengan `./check_web_status.sh`; hentikan layanan dengan `./stop_web_background.sh`. Jangan bagikan URL publik kepada pihak yang tidak berwenang.
+
 ---
 
 ## ⚙️ Konvensi Penamaan File Model

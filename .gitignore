@@ -25,6 +25,7 @@ env/
 # Temporary & Uploads
 temp_uploads/
 *.tmp
+logs/
 
 # OS Files
 .DS_Store
