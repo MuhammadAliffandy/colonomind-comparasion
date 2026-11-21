@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-PORT="${1:-8501}"
+PORT="${1:-8502}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PID_DIR="$SCRIPT_DIR/logs/pids"
 

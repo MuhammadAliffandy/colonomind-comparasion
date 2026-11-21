@@ -111,12 +111,12 @@ Atau untuk akses dari jaringan lain: **`http://<IP_SERVER>:8501`**
 
 ### Jalankan Streamlit lewat ngrok di background
 
-Jalankan dari root proyek pada DGX. Skrip menjalankan `ngrok http http://127.0.0.1:8501` memakai YAML default tanpa override URL. Ngrok akan menggunakan domain default akun; log tunnel ColonoMind dibaca dari file log proyek supaya status URL tidak tertukar dengan tunnel Brain.
+Jalankan dari root proyek pada DGX. Skrip memakai port `8502` secara default agar tidak berbenturan dengan web Brain yang memakai `8501`, lalu menjalankan `ngrok http http://127.0.0.1:8502` memakai YAML default tanpa override URL. Log tunnel dibaca dari file log proyek supaya status URL tidak tertukar dengan tunnel Brain. Jika port `8502` sedang dipakai, skrip berhenti dan meminta port tersebut diperiksa sebelum membuka tunnel.
 
 ```bash
 chmod +x start_web_background.sh stop_web_background.sh check_web_status.sh
-./start_web_background.sh          # port default 8501
-./start_web_background.sh 8502    # jika ingin memakai port lain
+./start_web_background.sh          # port default 8502
+./start_web_background.sh 8503    # jika ingin memakai port lain
 ```
 
 Skrip memakai `venv/` proyek jika tersedia dan mencatat log di `logs/`. Periksa URL publik dengan `./check_web_status.sh`; hentikan layanan dengan `./stop_web_background.sh`. Jangan bagikan URL publik kepada pihak yang tidak berwenang.

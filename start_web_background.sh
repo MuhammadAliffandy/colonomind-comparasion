@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-PORT="${1:-8501}"
+PORT="${1:-8502}"
 NGROK_URL="https://backtrack-emcee-numbness.ngrok-free.dev"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
@@ -46,6 +46,15 @@ if [[ -f "$STREAMLIT_PID_FILE" ]] && kill -0 "$(<"$STREAMLIT_PID_FILE")" 2>/dev/
 fi
 if [[ -f "$NGROK_PID_FILE" ]] && kill -0 "$(<"$NGROK_PID_FILE")" 2>/dev/null; then
     printf 'Ngrok tampaknya sudah berjalan (PID %s). Hentikan dulu dengan ./stop_web_background.sh %s\n' "$(<"$NGROK_PID_FILE")" "$PORT" >&2
+    exit 1
+fi
+if "$PYTHON" -c 'import socket,sys
+try:
+    socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1).close()
+except OSError:
+    raise SystemExit(1)
+raise SystemExit(0)' "$PORT"; then
+    printf 'Port %s sudah dipakai. Tidak menjalankan tunnel agar tidak tersambung ke aplikasi lain. Cek prosesnya atau pilih port lain.\n' "$PORT" >&2
     exit 1
 fi
 
