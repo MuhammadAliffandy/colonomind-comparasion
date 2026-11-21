@@ -111,12 +111,12 @@ Atau untuk akses dari jaringan lain: **`http://<IP_SERVER>:8501`**
 
 ### Jalankan Streamlit lewat ngrok di background
 
-Jalankan dari root proyek pada DGX. Proses yang aktif menunjukkan ColonoMind memakai port `8501`. Skrip memakai port itu secara default dan menjalankan `ngrok http http://127.0.0.1:8501` dengan YAML default tanpa override URL. Jika app ColonoMind sudah berjalan dari folder proyek, skrip akan memakai proses tersebut; jika port dipakai aplikasi lain, skrip berhenti.
+Jalankan dari root proyek pada DGX. Port `8501` sedang dipakai proses Streamlit dari folder lain, sedangkan pengecekan sebelumnya tidak menemukan listener di `8502`. Karena itu skrip memakai `8502` untuk menjalankan app ColonoMind lalu membuka `ngrok http http://127.0.0.1:8502` dengan YAML default tanpa override URL. Jika app ColonoMind sudah berjalan dari folder proyek, skrip akan memakai proses tersebut; jika port dipakai aplikasi lain, skrip berhenti.
 
 ```bash
 chmod +x start_web_background.sh stop_web_background.sh check_web_status.sh
-./start_web_background.sh          # port default 8501
-./start_web_background.sh 8502    # jika ingin memakai port lain
+./start_web_background.sh          # port default 8502
+./start_web_background.sh 8503    # jika ingin memakai port lain
 ```
 
 Skrip memakai `venv/` proyek jika tersedia dan mencatat log di `logs/`. Periksa URL publik dengan `./check_web_status.sh`; hentikan layanan dengan `./stop_web_background.sh`. Jangan bagikan URL publik kepada pihak yang tidak berwenang.
