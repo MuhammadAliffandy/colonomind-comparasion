@@ -111,7 +111,7 @@ Atau untuk akses dari jaringan lain: **`http://<IP_SERVER>:8501`**
 
 ### Jalankan Streamlit lewat ngrok di background
 
-Jalankan dari root proyek pada DGX. Skrip memakai konfigurasi ngrok default milik user yang menjalankannya, termasuk file YAML dan authtoken yang sudah tersimpan di sana:
+Jalankan dari root proyek pada DGX. Skrip membuka tunnel ke `http://127.0.0.1:8501` dengan `ngrok http <host>` dan memakai konfigurasi YAML default serta authtoken yang sudah tersimpan untuk user tersebut:
 
 ```bash
 chmod +x start_web_background.sh stop_web_background.sh check_web_status.sh

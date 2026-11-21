@@ -74,7 +74,7 @@ if ! command -v curl >/dev/null 2>&1 || ! curl -fsS "http://127.0.0.1:$PORT/_stc
     exit 1
 fi
 
-nohup ngrok http "$PORT" --log=stdout --log-format=json >"$NGROK_LOG" 2>&1 </dev/null &
+nohup ngrok http "http://127.0.0.1:$PORT" >"$NGROK_LOG" 2>&1 </dev/null &
 NGROK_PID=$!
 printf '%s\n' "$NGROK_PID" >"$NGROK_PID_FILE"
 
