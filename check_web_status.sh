@@ -29,7 +29,7 @@ if command -v curl >/dev/null 2>&1; then
     URL="$(curl -fsS http://127.0.0.1:4040/api/tunnels 2>/dev/null | python3 -c 'import json,sys
 try:
     data=json.load(sys.stdin)
-    print(next((t["public_url"] for t in data.get("tunnels", []) if t.get("public_url", "").startswith("https://")), ""))
+    print(next((t["public_url"] for t in data.get("tunnels", []) if t.get("public_url", "").rstrip("/") == "https://backtrack-emcee-numbness.ngrok-free.dev"), ""))
 except Exception:
     pass' 2>/dev/null || true)"
     if [[ -n "$URL" ]]; then

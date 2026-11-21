@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 PORT="${1:-8501}"
+NGROK_URL="https://backtrack-emcee-numbness.ngrok-free.dev"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="$SCRIPT_DIR/logs"
 PID_DIR="$LOG_DIR/pids"
@@ -74,26 +75,25 @@ if ! command -v curl >/dev/null 2>&1 || ! curl -fsS "http://127.0.0.1:$PORT/_stc
     exit 1
 fi
 
-nohup ngrok http "http://127.0.0.1:$PORT" >"$NGROK_LOG" 2>&1 </dev/null &
+nohup ngrok http "http://127.0.0.1:$PORT" --url "$NGROK_URL" >"$NGROK_LOG" 2>&1 </dev/null &
 NGROK_PID=$!
 printf '%s\n' "$NGROK_PID" >"$NGROK_PID_FILE"
 
-NGROK_URL=""
 for _ in {1..20}; do
     if ! kill -0 "$NGROK_PID" 2>/dev/null; then
         break
     fi
-    NGROK_URL="$("$PYTHON" -c 'import json,sys,urllib.request
+ACTIVE_NGROK_URL="$("$PYTHON" -c 'import json,sys,urllib.request
 try:
     data=json.load(urllib.request.urlopen("http://127.0.0.1:4040/api/tunnels", timeout=1))
-    print(next((t["public_url"] for t in data.get("tunnels", []) if t.get("public_url", "").startswith("https://")), ""))
+    print(next((t["public_url"] for t in data.get("tunnels", []) if t.get("public_url", "").rstrip("/") == "https://backtrack-emcee-numbness.ngrok-free.dev"), ""))
 except Exception:
     pass' 2>/dev/null || true)"
-    [[ -n "$NGROK_URL" ]] && break
+    [[ -n "$ACTIVE_NGROK_URL" ]] && break
     sleep 1
 done
 
-if [[ -z "$NGROK_URL" ]]; then
+if [[ -z "$ACTIVE_NGROK_URL" ]]; then
     printf 'Ngrok belum menghasilkan URL publik. Log: %s\n' "$NGROK_LOG" >&2
     printf 'Streamlit masih berjalan di http://127.0.0.1:%s (PID %s). Jalankan ./stop_web_background.sh %s untuk menghentikan.\n' "$PORT" "$STREAMLIT_PID" "$PORT" >&2
     exit 1
