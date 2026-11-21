@@ -121,6 +121,15 @@ chmod +x start_web_background.sh stop_web_background.sh check_web_status.sh
 
 Skrip memakai `venv/` proyek jika tersedia dan mencatat log di `logs/`. Periksa URL publik dengan `./check_web_status.sh`; hentikan layanan dengan `./stop_web_background.sh`. Jangan bagikan URL publik kepada pihak yang tidak berwenang.
 
+Jika aplikasi berhenti dengan `ModuleNotFoundError: No module named 'pkg_resources'` saat mengimpor TensorFlow Hub, perbaiki environment aktif lalu mulai ulang:
+
+```bash
+python -m pip install 'setuptools<82'
+./start_web_background.sh
+```
+
+TensorFlow Hub 0.16.x masih mengimpor `pkg_resources`, yang dihapus pada setuptools 82. Batas versi di `requirements.txt` menjaga instalasi proyek tetap kompatibel.
+
 ---
 
 ## ⚙️ Konvensi Penamaan File Model
